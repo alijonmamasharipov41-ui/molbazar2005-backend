@@ -138,14 +138,33 @@ router.post("/verify", async (req, res, next) => {
       user = insertResult.rows[0];
     }
 
+    const isAdminPanel = req.headers["x-admin-panel"] === "true" || req.body?.adminPanel === true;
+    if (isAdminPanel && user.role !== "admin") {
+      return res.status(403).json({
+        ok: false,
+        error: "Access denied. Admin only.",
+      });
+    }
+
     const tokenVersion = Number(user.token_version) || 0;
+    const expiresIn = isAdminPanel && user.role === "admin" ? "12h" : "30d";
     const token = jwt.sign(
       { id: user.id, role: user.role || "user", tokenVersion },
       JWT_SECRET,
-      { expiresIn: "30d" }
+      { expiresIn }
     );
 
     await trackEvent({ type: "user_login", userId: user.id });
+
+    if (isAdminPanel && user.role === "admin") {
+      const ip = req.ip || req.get("x-forwarded-for") || null;
+      const userAgent = req.get("user-agent") || "";
+      await query(
+        `INSERT INTO admin_audit_logs (user_id, action, ip_address, user_agent)
+         VALUES ($1, 'admin_login', $2, $3)`,
+        [user.id, ip, userAgent]
+      );
+    }
 
     res.json({
       ok: true,

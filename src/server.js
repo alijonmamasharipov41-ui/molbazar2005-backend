@@ -12,7 +12,7 @@ if (isMigrate) {
   (async () => {
     try {
       const sqlDir = path.join(__dirname, "sql");
-      const files = ["001_init.sql", "002_categories_listings.sql", "003_users_profile.sql", "004_listing_images.sql", "005_listing_images_index.sql", "006_favorites.sql", "007_chat.sql", "008_add_phone_and_product_type.sql", "009_token_version.sql", "010_otp_email_auth.sql", "011_otp_attempt_limit.sql", "012_analytics_events.sql", "013_analytics_daily.sql", "014_analytics_app_login.sql"];
+      const files = ["001_init.sql", "002_categories_listings.sql", "003_users_profile.sql", "004_listing_images.sql", "005_listing_images_index.sql", "006_favorites.sql", "007_chat.sql", "008_add_phone_and_product_type.sql", "009_token_version.sql", "010_otp_email_auth.sql", "011_otp_attempt_limit.sql", "012_analytics_events.sql", "013_analytics_daily.sql", "014_analytics_app_login.sql", "015_admin_audit_log.sql"];
       for (const file of files) {
         const sqlPath = path.join(sqlDir, file);
         if (!fs.existsSync(sqlPath)) continue;
