@@ -58,9 +58,11 @@ router.post("/request", async (req, res, next) => {
 
     const sendResult = await sendOtpEmail(normalizedEmail, code);
     if (!sendResult.ok) {
+      const msg =
+        sendResult.error || "Email yuborilmadi";
       return res.status(500).json({
         ok: false,
-        error: sendResult.error || "Failed to send email",
+        error: msg,
       });
     }
 
@@ -70,8 +72,8 @@ router.post("/request", async (req, res, next) => {
   }
 });
 
-/** POST /api/otp/verify — verify code, find or create user, return JWT */
-router.post("/verify", async (req, res, next) => {
+/** Shared handler: verify OTP (email + code), return JWT. Used by both POST /api/otp/verify and POST /api/auth/verify. */
+async function handleVerify(req, res, next) {
   try {
     const parsed = verifySchema.safeParse(req.body);
     if (!parsed.success) {
@@ -93,7 +95,10 @@ router.post("/verify", async (req, res, next) => {
     );
 
     if (otpRow.rows.length === 0) {
-      return res.status(400).json({ ok: false, error: "Invalid or expired code" });
+      return res.status(400).json({
+        ok: false,
+        error: "Kod topilmadi yoki muddati o'tgan. Yangi kod so'rab, 10 daqiqa ichida kiriting.",
+      });
     }
 
     const row = otpRow.rows[0];
@@ -182,6 +187,9 @@ router.post("/verify", async (req, res, next) => {
   } catch (err) {
     next(err);
   }
-});
+}
+
+router.post("/verify", handleVerify);
 
 module.exports = router;
+module.exports.handleVerify = handleVerify;

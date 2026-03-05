@@ -14,6 +14,7 @@ const createSchema = z.object({
   region: z.string().optional().default(""),
   district: z.string().optional().default(""),
   phone: z.string().optional().default(""),
+  phone_visible: z.boolean().optional().default(false),
   product_type: z.string().optional().default(""),
   images: z.array(z.string()).max(10).optional(),
 });
@@ -27,6 +28,7 @@ const updateSchema = z
     region: z.string().optional(),
     district: z.string().optional(),
     phone: z.string().optional(),
+    phone_visible: z.boolean().optional(),
     product_type: z.string().optional(),
     category_id: z.number().int().positive().nullable().optional(),
     status: z.enum(["approved", "rejected"]).optional(),
@@ -38,6 +40,14 @@ const SORT_MAP = {
   price_asc: "l.price ASC",
   price_desc: "l.price DESC",
 };
+
+/** When returning listings to API: hide phone unless phone_visible is true. */
+function maskPhoneForResponse(listing) {
+  if (listing && !listing.phone_visible) {
+    listing.phone = null;
+  }
+  return listing;
+}
 
 router.get("/", optionalAuth, async (req, res, next) => {
   try {
@@ -149,6 +159,7 @@ router.get("/", optionalAuth, async (req, res, next) => {
   l.region,
   l.district,
   l.phone,
+  l.phone_visible,
   l.product_type,
   l.status,
   l.created_at,
@@ -169,12 +180,13 @@ LIMIT $${limitIndex} OFFSET $${offsetIndex}`,
       listParams
     );
 
+    const items = listResult.rows.map((row) => maskPhoneForResponse(row));
     res.json({
       ok: true,
       page,
       limit,
       total,
-      items: listResult.rows,
+      items,
     });
   } catch (err) {
     next(err);
@@ -213,6 +225,7 @@ router.get("/:id", optionalAuth, async (req, res, next) => {
   l.region,
   l.district,
   l.phone,
+  l.phone_visible,
   l.product_type,
   l.status,
   l.created_at,
@@ -234,10 +247,15 @@ GROUP BY l.id, c.name`,
       return res.status(404).json({ ok: false, error: "Listing not found" });
     }
     const item = result.rows[0];
-    // Bozor: tasdiqlanmagan e'lon ko'rinmasin (admin barchasini ko'radi)
     const isAdminView = req.user && req.user.role === "admin";
-    if (!isAdminView && item.status !== "approved") {
+    const isOwner = req.user && (Number(req.user.id) === Number(item.user_id) || String(req.user.id) === String(item.user_id));
+    // Tasdiqlanmagan e'lon: faqat admin yoki egasi ko'radi (tahrirlash uchun)
+    if (!isAdminView && !isOwner && item.status !== "approved") {
       return res.status(404).json({ ok: false, error: "Listing not found" });
+    }
+    // Telefonni faqat ega yoki admin ko'rsin; boshqalar uchun phone_visible bo'lsagina
+    if (!isOwner && !isAdminView) {
+      maskPhoneForResponse(item);
     }
     const listingId = parseInt(req.params.id, 10);
     trackEvent({ type: "listing_view", listingId, userId: req.user ? req.user.id : null }).catch(() => {});
@@ -278,6 +296,7 @@ router.put("/:id", auth, async (req, res, next) => {
     if (req.body.region !== undefined) raw.region = req.body.region;
     if (req.body.district !== undefined) raw.district = req.body.district;
     if (req.body.phone !== undefined) raw.phone = req.body.phone;
+    if (req.body.phone_visible !== undefined) raw.phone_visible = req.body.phone_visible;
     if (req.body.product_type !== undefined) raw.product_type = req.body.product_type;
     if (req.body.category_id !== undefined) {
       raw.category_id = req.body.category_id === null || req.body.category_id === "" ? null : parseInt(req.body.category_id, 10);
@@ -293,7 +312,7 @@ router.put("/:id", auth, async (req, res, next) => {
     }
 
     const data = parsed.data;
-    const allowedColumns = ["title", "description", "price", "region", "district", "phone", "product_type", "category_id"];
+    const allowedColumns = ["title", "description", "price", "region", "district", "phone", "phone_visible", "product_type", "category_id"];
     const setParts = [];
     const setParams = [];
     let paramIdx = 1;
@@ -321,7 +340,7 @@ router.put("/:id", auth, async (req, res, next) => {
       setParams
     );
 
-    res.json({ ok: true, item: result.rows[0] });
+    res.json({ ok: true, item: maskPhoneForResponse(result.rows[0]) });
   } catch (err) {
     next(err);
   }
@@ -342,13 +361,13 @@ router.post("/", auth, async (req, res, next) => {
         error: parsed.error.errors[0]?.message || "Validation failed",
       });
     }
-    const { title, description, price, category_id, region, district, phone, product_type, images } = parsed.data;
+    const { title, description, price, category_id, region, district, phone, phone_visible, product_type, images } = parsed.data;
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
 
       const listingResult = await client.query(
-        `INSERT INTO listings (user_id, category_id, title, description, price, region, district, phone, product_type) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+        `INSERT INTO listings (user_id, category_id, title, description, price, region, district, phone, phone_visible, product_type) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
         [
           req.user.id,
           category_id || null,
@@ -358,6 +377,7 @@ router.post("/", auth, async (req, res, next) => {
           region || "",
           district || "",
           phone || "",
+          !!phone_visible,
           product_type || "",
         ]
       );
@@ -384,6 +404,7 @@ router.post("/", auth, async (req, res, next) => {
   l.region,
   l.district,
   l.phone,
+  l.phone_visible,
   l.product_type,
   l.status,
   l.created_at,
@@ -403,7 +424,11 @@ GROUP BY l.id, c.name`,
       await client.query("COMMIT");
       trackEvent({ type: "listing_created", listingId, userId: req.user.id }).catch(() => {});
 
-      res.status(201).json({ ok: true, item: fullListing.rows[0] });
+      res.status(201).json({
+        ok: true,
+        item: maskPhoneForResponse(fullListing.rows[0]),
+        message: "Sizning e'loningiz tekshiruv jarayoniga yuborildi. Administrator tomonidan tasdiqlangach, u platformada ko'rinadi.",
+      });
     } catch (err) {
       await client.query("ROLLBACK");
       throw err;

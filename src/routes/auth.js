@@ -5,6 +5,7 @@ const { z } = require("zod");
 const { query } = require("../db");
 const { JWT_SECRET } = require("../config");
 const { auth } = require("../middleware/auth");
+const { handleVerify } = require("./otp");
 
 const router = express.Router();
 
@@ -75,6 +76,9 @@ router.post("/login", async (req, res, next) => {
     next(err);
   }
 });
+
+/** POST /api/auth/verify — OTP verification (email + code), returns token. Same behavior as /api/otp/verify. */
+router.post("/verify", handleVerify);
 
 /** POST /api/auth/logout — increment token_version to invalidate all tokens for current user */
 router.post("/logout", auth, async (req, res, next) => {

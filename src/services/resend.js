@@ -18,10 +18,13 @@ if (RESEND_API_KEY && String(RESEND_API_KEY).trim()) {
  */
 async function sendOtpEmail(email, code) {
   if (!resend) {
-    return { ok: false, error: "RESEND_API_KEY not configured" };
+    return {
+      ok: false,
+      error: "Email xizmati sozlanmagan. Serverda RESEND_API_KEY o'rnating.",
+    };
   }
   try {
-    const { error } = await resend.emails.send({
+    const { data, error } = await resend.emails.send({
       from: APP_FROM_EMAIL,
       to: email,
       subject: "Molbozor tasdiqlash kodi",
@@ -35,11 +38,13 @@ async function sendOtpEmail(email, code) {
       `,
     });
     if (error) {
-      return { ok: false, error: error.message || "Email send failed" };
+      const msg = error.message || "Email yuborilmadi";
+      return { ok: false, error: msg };
     }
     return { ok: true };
   } catch (err) {
-    return { ok: false, error: err.message || "Email send failed" };
+    const msg = err?.message || "Email yuborilmadi";
+    return { ok: false, error: msg };
   }
 }
 
