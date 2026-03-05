@@ -20,8 +20,8 @@ function hashCode(code) {
   return crypto.createHash("sha256").update(code).digest("hex");
 }
 
-/** POST /api/otp/request — send OTP to email */
-router.post("/request", async (req, res, next) => {
+/** POST /api/otp/request and /api/otp/request-code — send OTP to email. Body: { email: string }. */
+async function handleRequestOtp(req, res, next) {
   try {
     const parsed = requestSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -58,8 +58,7 @@ router.post("/request", async (req, res, next) => {
 
     const sendResult = await sendOtpEmail(normalizedEmail, code);
     if (!sendResult.ok) {
-      const msg =
-        sendResult.error || "Email yuborilmadi";
+      const msg = sendResult.error || "Email yuborilmadi";
       return res.status(500).json({
         ok: false,
         error: msg,
@@ -70,7 +69,10 @@ router.post("/request", async (req, res, next) => {
   } catch (err) {
     next(err);
   }
-});
+}
+
+router.post("/request", handleRequestOtp);
+router.post("/request-code", handleRequestOtp);
 
 /** Shared handler: verify OTP (email + code), return JWT. Used by both POST /api/otp/verify and POST /api/auth/verify. */
 async function handleVerify(req, res, next) {
