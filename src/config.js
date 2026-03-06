@@ -6,6 +6,8 @@ const JWT_SECRET = process.env.JWT_SECRET;
 /** Resend: OTP email. Set RESEND_API_KEY and APP_FROM_EMAIL (e.g. "Molbozor <no-reply@yourdomain.com>") in .env */
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const APP_FROM_EMAIL = process.env.APP_FROM_EMAIL || "Molbozor <onboarding@resend.dev>";
+/** Banner/upload rasmlari uchun asosiy URL (relative yo‘llarni to‘liq qilish). Masalan: https://molbazar.uz */
+const PUBLIC_URL = process.env.PUBLIC_URL || process.env.API_BASE_URL || "https://molbazar.uz";
 
 if (!DATABASE_URL) {
   throw new Error("DATABASE_URL is required. Set it in .env");
@@ -21,4 +23,5 @@ module.exports = {
   JWT_SECRET,
   RESEND_API_KEY,
   APP_FROM_EMAIL,
+  PUBLIC_URL,
 };

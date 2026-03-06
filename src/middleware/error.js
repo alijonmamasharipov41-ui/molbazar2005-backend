@@ -1,5 +1,9 @@
 function errorHandler(err, req, res, next) {
-  console.error(err);
+  if (process.env.NODE_ENV === "production") {
+    console.error("Error:", err.message || "Server error");
+  } else {
+    console.error(err);
+  }
   const message = err.message || "Server error";
   let status = err.statusCode || 500;
   if (message.includes("Invalid file type") || err.code === "LIMIT_FILE_SIZE") status = 400;

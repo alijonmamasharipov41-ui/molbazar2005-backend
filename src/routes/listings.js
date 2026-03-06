@@ -6,17 +6,23 @@ const { trackEvent } = require("../analytics");
 
 const router = express.Router();
 
+const CATEGORY_SLUGS = ["chorva", "parandalar", "baliqlar", "don", "yemish"];
 const createSchema = z.object({
   title: z.string().min(1, "title required"),
   description: z.string().optional().default(""),
   price: z.number().min(0).optional().default(0),
   category_id: z.number().int().positive().optional().nullable(),
+  category_slug: z.string().optional().default(""),
   region: z.string().optional().default(""),
   district: z.string().optional().default(""),
   phone: z.string().optional().default(""),
   phone_visible: z.boolean().optional().default(false),
   product_type: z.string().optional().default(""),
   images: z.array(z.string()).max(10).optional(),
+  yoshi: z.string().optional().default(""),
+  zoti: z.string().optional().default(""),
+  jinsi: z.string().optional().default(""),
+  vazn: z.string().optional().default(""),
 });
 
 /** PUT /listings/:id — only validates and updates provided fields */
@@ -31,7 +37,12 @@ const updateSchema = z
     phone_visible: z.boolean().optional(),
     product_type: z.string().optional(),
     category_id: z.number().int().positive().nullable().optional(),
+    category_slug: z.string().optional(),
     status: z.enum(["approved", "rejected"]).optional(),
+    yoshi: z.string().optional(),
+    zoti: z.string().optional(),
+    jinsi: z.string().optional(),
+    vazn: z.string().optional(),
   })
   .strict();
 
@@ -162,7 +173,12 @@ router.get("/", optionalAuth, async (req, res, next) => {
   l.phone_visible,
   l.product_type,
   l.status,
+  l.category_slug,
   l.created_at,
+  l.yoshi,
+  l.zoti,
+  l.jinsi,
+  l.vazn,
   COALESCE(
     JSON_AGG(li.image_url)
       FILTER (WHERE li.image_url IS NOT NULL),
@@ -228,7 +244,12 @@ router.get("/:id", optionalAuth, async (req, res, next) => {
   l.phone_visible,
   l.product_type,
   l.status,
+  l.category_slug,
   l.created_at,
+  l.yoshi,
+  l.zoti,
+  l.jinsi,
+  l.vazn,
   COALESCE(
     JSON_AGG(li.image_url)
       FILTER (WHERE li.image_url IS NOT NULL),
@@ -301,7 +322,12 @@ router.put("/:id", auth, async (req, res, next) => {
     if (req.body.category_id !== undefined) {
       raw.category_id = req.body.category_id === null || req.body.category_id === "" ? null : parseInt(req.body.category_id, 10);
     }
+    if (req.body.category_slug !== undefined) raw.category_slug = req.body.category_slug;
     if (req.body.status !== undefined) raw.status = req.body.status;
+    if (req.body.yoshi !== undefined) raw.yoshi = req.body.yoshi;
+    if (req.body.zoti !== undefined) raw.zoti = req.body.zoti;
+    if (req.body.jinsi !== undefined) raw.jinsi = req.body.jinsi;
+    if (req.body.vazn !== undefined) raw.vazn = req.body.vazn;
 
     const parsed = updateSchema.safeParse(raw);
     if (!parsed.success) {
@@ -312,7 +338,7 @@ router.put("/:id", auth, async (req, res, next) => {
     }
 
     const data = parsed.data;
-    const allowedColumns = ["title", "description", "price", "region", "district", "phone", "phone_visible", "product_type", "category_id"];
+    const allowedColumns = ["title", "description", "price", "region", "district", "phone", "phone_visible", "product_type", "category_id", "category_slug", "yoshi", "zoti", "jinsi", "vazn"];
     const setParts = [];
     const setParams = [];
     let paramIdx = 1;
@@ -361,16 +387,20 @@ router.post("/", auth, async (req, res, next) => {
         error: parsed.error.errors[0]?.message || "Validation failed",
       });
     }
-    const { title, description, price, category_id, region, district, phone, phone_visible, product_type, images } = parsed.data;
+    const { title, description, price, category_id, category_slug, region, district, phone, phone_visible, product_type, images, yoshi, zoti, jinsi, vazn } = parsed.data;
     const client = await pool.connect();
+    const slug = (category_slug && CATEGORY_SLUGS.includes(String(category_slug).toLowerCase()))
+      ? String(category_slug).toLowerCase()
+      : "";
     try {
       await client.query("BEGIN");
 
       const listingResult = await client.query(
-        `INSERT INTO listings (user_id, category_id, title, description, price, region, district, phone, phone_visible, product_type) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
+        `INSERT INTO listings (user_id, category_id, category_slug, title, description, price, region, district, phone, phone_visible, product_type, yoshi, zoti, jinsi, vazn) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING id`,
         [
           req.user.id,
           category_id || null,
+          slug,
           title,
           description || "",
           price,
@@ -379,6 +409,10 @@ router.post("/", auth, async (req, res, next) => {
           phone || "",
           !!phone_visible,
           product_type || "",
+          (yoshi || "").toString(),
+          (zoti || "").toString(),
+          (jinsi || "").toString(),
+          (vazn || "").toString(),
         ]
       );
       const listingId = listingResult.rows[0].id;
@@ -407,7 +441,12 @@ router.post("/", auth, async (req, res, next) => {
   l.phone_visible,
   l.product_type,
   l.status,
+  l.category_slug,
   l.created_at,
+  l.yoshi,
+  l.zoti,
+  l.jinsi,
+  l.vazn,
   COALESCE(
     JSON_AGG(li.image_url)
       FILTER (WHERE li.image_url IS NOT NULL),

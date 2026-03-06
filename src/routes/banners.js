@@ -2,8 +2,19 @@ const express = require("express");
 const { z } = require("zod");
 const { query } = require("../db");
 const { auth, optionalAuth } = require("../middleware/auth");
+const { PUBLIC_URL } = require("../config");
 
 const router = express.Router();
+
+/** Rasm URL i http(s) bilan boshlanmasa, PUBLIC_URL qo‘shiladi (app va admin uchun to‘liq yo‘l). */
+function normalizeImageUrl(url) {
+  if (!url || typeof url !== "string") return url || "";
+  const trimmed = url.trim();
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed;
+  const base = PUBLIC_URL.replace(/\/$/, "");
+  const path = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+  return `${base}${path}`;
+}
 
 const createSchema = z.object({
   name: z.string().min(1, "name required"),
@@ -19,12 +30,13 @@ const createSchema = z.object({
 
 const updateSchema = createSchema.partial();
 
-/** GET /api/banners — ro'yxat (public). placement=home|categories|listing ixtiyoriy. all=1 + auth admin = barcha bannerlar. */
+/** GET /api/banners — ro'yxat (public). placement=home|categories|listing, type=hero|sidebar ixtiyoriy. all=1 + auth admin = barcha bannerlar. */
 router.get("/", optionalAuth, async (req, res, next) => {
   try {
-    const placement = req.query.placement && ["home", "categories", "listing"].includes(req.query.placement)
-      ? req.query.placement
-      : null;
+    const placementRaw = req.query.placement != null ? String(req.query.placement).toLowerCase() : "";
+    const placement = ["home", "categories", "listing"].includes(placementRaw) ? placementRaw : null;
+    const typeRaw = req.query.type != null ? String(req.query.type).toLowerCase() : "";
+    const typeFilter = ["hero", "sidebar"].includes(typeRaw) ? typeRaw : null;
     const showAll = req.query.all === "1" && req.user?.role === "admin";
     const today = new Date().toISOString().slice(0, 10);
 
@@ -45,13 +57,18 @@ router.get("/", optionalAuth, async (req, res, next) => {
       sql += (params.length === 1 ? " WHERE " : " AND ") + `placement = $${idx}`;
       idx++;
     }
+    if (typeFilter) {
+      params.push(typeFilter);
+      sql += (params.length === 1 ? " WHERE " : " AND ") + `type = $${idx}`;
+      idx++;
+    }
     sql += ` ORDER BY priority ASC, id ASC`;
 
     const result = await query(sql, params);
     const items = result.rows.map((row) => ({
       id: String(row.id),
       name: row.name,
-      imageUrl: row.image_url,
+      imageUrl: normalizeImageUrl(row.image_url),
       link: row.link_url ?? "",
       endDate: row.end_date ? String(row.end_date).slice(0, 10) : "",
       placement: row.placement ?? "home",
@@ -90,7 +107,7 @@ router.get("/:id", async (req, res, next) => {
       item: {
         id: String(row.id),
         name: row.name,
-        imageUrl: row.image_url,
+        imageUrl: normalizeImageUrl(row.image_url),
         link: row.link_url ?? "",
         endDate: row.end_date ? String(row.end_date).slice(0, 10) : "",
         placement: row.placement ?? "home",
@@ -142,7 +159,7 @@ router.post("/", auth, async (req, res, next) => {
       item: {
         id: String(row.id),
         name: row.name,
-        imageUrl: row.image_url,
+        imageUrl: normalizeImageUrl(row.image_url),
         link: row.link_url ?? "",
         endDate: row.end_date ? String(row.end_date).slice(0, 10) : "",
         placement: row.placement ?? "home",
@@ -215,7 +232,7 @@ router.put("/:id", auth, async (req, res, next) => {
       item: {
         id: String(row.id),
         name: row.name,
-        imageUrl: row.image_url,
+        imageUrl: normalizeImageUrl(row.image_url),
         link: row.link_url ?? "",
         endDate: row.end_date ? String(row.end_date).slice(0, 10) : "",
         placement: row.placement ?? "home",
