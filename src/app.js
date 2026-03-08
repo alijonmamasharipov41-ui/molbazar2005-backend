@@ -30,6 +30,8 @@ api.use("/health", healthRouter);
 api.use("/auth", authRouter);
 api.use("/categories", categoriesRouter);
 api.use("/listings", listingsRouter);
+// Alias: /api/listing/7 ham ishlaydi (mobil ilova /listing/7 yo'lini API ga yuborsa)
+api.use("/listing", listingsRouter);
 api.use("/users", usersRouter);
 api.use("/uploads", uploadsRouter);
 api.use("/favorites", favoritesRouter);

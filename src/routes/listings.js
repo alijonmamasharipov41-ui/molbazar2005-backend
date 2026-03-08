@@ -50,6 +50,8 @@ const SORT_MAP = {
   new: "l.created_at DESC",
   price_asc: "l.price ASC",
   price_desc: "l.price DESC",
+  id_asc: "l.id ASC",
+  id_desc: "l.id DESC",
 };
 
 /** When returning listings to API: hide phone unless phone_visible is true. */

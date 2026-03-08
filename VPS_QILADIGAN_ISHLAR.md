@@ -101,3 +101,17 @@ pm2 restart molbazar2005-backend
 ```
 
 Shundan keyin VPS dagi backend yangi migratsiyalar va kod bilan ishlaydi.
+
+---
+
+## Admin banner qo‘yadi, ilovada ko‘rinmayapti
+
+- **Admin** va **ilova** bir xil backend’dan ma’lumot olishi kerak. Agar admin **localhost**da ishlab, bannerlarni **localhost** backend’ga yozsa, ilova **https://molbazar.uz/api** dan olganda bu bannerlarni ko‘rmaydi.
+- **Admin panel .env** da quyidagi bo‘lishi kerak:
+  ```env
+  NEXT_PUBLIC_API_BASE_URL=https://molbazar.uz/api
+  ```
+  Agar `NEXT_PUBLIC_API_BASE_URL=http://localhost:5000/api` bo‘lsa, banner faqat kompyuteringizdagi bazaga yoziladi — **o‘zgartiring**: `https://molbazar.uz/api` qiling.
+- **Yechim:** Admin panelni VPS dagi backend’ga ulang. Bannerlarni shu admin orqali qo‘shing — ular molbazar.uz bazasiga yoziladi va ilova ko‘radi.
+- **VPS da** `node src/server.js --migrate` bajarilgan bo‘lishi kerak (banners jadvali mavjud bo‘ladi).
+- **Muddat:** "Muddat (reklama tugash sanasi)" da **kelajak** sana tanlang; o‘tgan sana bo‘lsa ilova bannerlarni ko‘rsatmaydi.
