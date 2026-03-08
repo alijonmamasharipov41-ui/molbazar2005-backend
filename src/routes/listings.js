@@ -189,6 +189,7 @@ router.get("/", optionalAuth, async (req, res, next) => {
   l.zoti,
   l.jinsi,
   l.vazn,
+  u.full_name AS seller_name,
   COALESCE(
     JSON_AGG(li.image_url)
       FILTER (WHERE li.image_url IS NOT NULL),
@@ -197,10 +198,11 @@ router.get("/", optionalAuth, async (req, res, next) => {
   ${isFavoriteSelect}
 FROM listings l
 LEFT JOIN categories c ON c.id = l.category_id
+LEFT JOIN users u ON u.id = l.user_id
 LEFT JOIN listing_images li ON li.listing_id = l.id
 ${favoritesJoin}
 ${whereClause}
-GROUP BY l.id, c.name
+GROUP BY l.id, c.name, u.full_name
 ORDER BY ${orderBy}
 LIMIT $${limitIndex} OFFSET $${offsetIndex}`,
       listParams
@@ -260,6 +262,7 @@ router.get("/:id", optionalAuth, async (req, res, next) => {
   l.zoti,
   l.jinsi,
   l.vazn,
+  u.full_name AS seller_name,
   COALESCE(
     JSON_AGG(li.image_url)
       FILTER (WHERE li.image_url IS NOT NULL),
@@ -268,10 +271,11 @@ router.get("/:id", optionalAuth, async (req, res, next) => {
   ${isFavoriteSelect}
 FROM listings l
 LEFT JOIN categories c ON c.id = l.category_id
+LEFT JOIN users u ON u.id = l.user_id
 LEFT JOIN listing_images li ON li.listing_id = l.id
 ${favoritesJoin}
 WHERE l.id = $1
-GROUP BY l.id, c.name`,
+GROUP BY l.id, c.name, u.full_name`,
       params
     );
     if (result.rows.length === 0) {
