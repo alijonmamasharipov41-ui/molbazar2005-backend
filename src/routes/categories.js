@@ -5,9 +5,26 @@ const { auth, optionalAuth } = require("../middleware/auth");
 
 const router = express.Router();
 
+/** Bosh sahifada banner tagida ko'rsatiladigan kategoriyalar (bozor bo'limi tepasida). "Bozor" so'zi nomda yo'q. */
+const HOME_CATEGORIES = [
+  { slug: "chorva", name: "Chorva", icon: "🐄" },
+  { slug: "parandalar", name: "Paranda", icon: "🐔" },
+  { slug: "baliqlar", name: "Baliq", icon: "🐟" },
+  { slug: "yemish", name: "Yem-yemish", icon: "🥬" },
+];
+
 const createSchema = z.object({
   name: z.string().min(1, "name required"),
   parent_id: z.number().int().positive().optional().nullable(),
+});
+
+/** GET /api/categories/home — mobil: banner tagida kategoriya ikonkalari uchun (chorva, paranda, baliq, yem-yemish) */
+router.get("/home", optionalAuth, async (req, res, next) => {
+  try {
+    res.json({ ok: true, items: HOME_CATEGORIES });
+  } catch (err) {
+    next(err);
+  }
 });
 
 router.get("/", optionalAuth, async (req, res, next) => {

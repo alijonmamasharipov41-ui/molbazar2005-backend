@@ -90,6 +90,14 @@ router.get("/", optionalAuth, async (req, res, next) => {
         paramIndex++;
       }
     }
+    if (req.query.category_slug && String(req.query.category_slug).trim()) {
+      const slug = String(req.query.category_slug).trim().toLowerCase();
+      if (CATEGORY_SLUGS.includes(slug)) {
+        conditions.push(`LOWER(TRIM(l.category_slug)) = $${paramIndex}`);
+        params.push(slug);
+        paramIndex++;
+      }
+    }
     if (req.query.region && String(req.query.region).trim()) {
       conditions.push(`l.region = $${paramIndex}`);
       params.push(String(req.query.region).trim());
