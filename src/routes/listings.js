@@ -7,14 +7,26 @@ const { trackEvent } = require("../analytics");
 const router = express.Router();
 
 const CATEGORY_SLUGS = ["chorva", "parandalar", "baliqlar", "don", "yemish"];
+const regionDistrictIdSchema = z.preprocess(
+  (val) => (val === "" || val === undefined ? null : Number(val)),
+  z.number().int().positive().nullable().optional()
+);
+
+const weightSchema = z.preprocess(
+  (val) => (val === "" || val === undefined ? null : Number(val)),
+  z.number().min(0).nullable().optional()
+);
+
 const createSchema = z.object({
-  title: z.string().min(1, "title required"),
+  title: z.string().min(3, "title required"),
   description: z.string().optional().default(""),
   price: z.number().min(0).optional().default(0),
   category_id: z.number().int().positive().optional().nullable(),
   category_slug: z.string().optional().default(""),
   region: z.string().optional().default(""),
   district: z.string().optional().default(""),
+  region_id: regionDistrictIdSchema,
+  district_id: regionDistrictIdSchema,
   phone: z.string().optional().default(""),
   phone_visible: z.boolean().optional().default(false),
   product_type: z.string().optional().default(""),
@@ -23,6 +35,8 @@ const createSchema = z.object({
   zoti: z.string().optional().default(""),
   jinsi: z.string().optional().default(""),
   vazn: z.string().optional().default(""),
+  weight: weightSchema,
+  unit: z.string().optional().nullable(),
 });
 
 /** PUT /listings/:id — only validates and updates provided fields */
@@ -33,6 +47,8 @@ const updateSchema = z
     price: z.number().min(0).optional(),
     region: z.string().optional(),
     district: z.string().optional(),
+    region_id: regionDistrictIdSchema,
+    district_id: regionDistrictIdSchema,
     phone: z.string().optional(),
     phone_visible: z.boolean().optional(),
     product_type: z.string().optional(),
@@ -43,6 +59,8 @@ const updateSchema = z
     zoti: z.string().optional(),
     jinsi: z.string().optional(),
     vazn: z.string().optional(),
+    weight: weightSchema,
+    unit: z.string().optional().nullable(),
   })
   .strict();
 
@@ -72,16 +90,22 @@ router.get("/", optionalAuth, async (req, res, next) => {
     const sortKey = req.query.sort && SORT_MAP[req.query.sort] ? req.query.sort : "new";
     const orderBy = SORT_MAP[sortKey];
 
-    const conditions = [];
-    const params = [];
-    let paramIndex = 1;
+    const search = (req.query.search ?? req.query.query)?.trim() || null;
+    const searchTerm = search ? `%${search}%` : null;
+    const regionId = req.query.region_id != null && req.query.region_id !== "" ? parseInt(req.query.region_id, 10) : null;
+    const districtId = req.query.district_id != null && req.query.district_id !== "" ? parseInt(req.query.district_id, 10) : null;
+    const rid = !Number.isNaN(regionId) ? regionId : null;
+    const did = !Number.isNaN(districtId) ? districtId : null;
 
-    if (req.query.query && String(req.query.query).trim()) {
-      const searchTerm = "%" + String(req.query.query).trim() + "%";
-      conditions.push(`(l.title ILIKE $${paramIndex} OR l.description ILIKE $${paramIndex})`);
-      params.push(searchTerm);
-      paramIndex++;
-    }
+    const conditions = [
+      "(l.title ILIKE $1 OR l.description ILIKE $1 OR $1 IS NULL)",
+      "(l.region_id = $2 OR $2 IS NULL)",
+      "(l.district_id = $3 OR $3 IS NULL)",
+    ];
+    // Query'ga: [searchTerm, region_id, district_id, ...]
+    const params = [searchTerm, rid, did];
+    let paramIndex = 4;
+
     if (req.query.category_id != null && req.query.category_id !== "") {
       const catId = parseInt(req.query.category_id, 10);
       if (!Number.isNaN(catId)) {
@@ -179,6 +203,8 @@ router.get("/", optionalAuth, async (req, res, next) => {
   l.price,
   l.region,
   l.district,
+  r.name AS region_name,
+  d.name AS district_name,
   l.phone,
   l.phone_visible,
   l.product_type,
@@ -189,6 +215,8 @@ router.get("/", optionalAuth, async (req, res, next) => {
   l.zoti,
   l.jinsi,
   l.vazn,
+  l.weight,
+  l.unit,
   u.full_name AS seller_name,
   COALESCE(
     JSON_AGG(li.image_url)
@@ -199,10 +227,12 @@ router.get("/", optionalAuth, async (req, res, next) => {
 FROM listings l
 LEFT JOIN categories c ON c.id = l.category_id
 LEFT JOIN users u ON u.id = l.user_id
+LEFT JOIN regions r ON r.id = l.region_id
+LEFT JOIN districts d ON d.id = l.district_id
 LEFT JOIN listing_images li ON li.listing_id = l.id
 ${favoritesJoin}
 ${whereClause}
-GROUP BY l.id, c.name, u.full_name
+GROUP BY l.id, c.name, u.full_name, r.name, d.name
 ORDER BY ${orderBy}
 LIMIT $${limitIndex} OFFSET $${offsetIndex}`,
       listParams
@@ -243,25 +273,10 @@ router.get("/:id", optionalAuth, async (req, res, next) => {
 
     const result = await query(
       `SELECT
-  l.id,
-  l.user_id,
-  l.category_id,
+  l.*,
+  r.name AS region_name,
+  d.name AS district_name,
   c.name AS category_name,
-  l.title,
-  l.description,
-  l.price,
-  l.region,
-  l.district,
-  l.phone,
-  l.phone_visible,
-  l.product_type,
-  l.status,
-  l.category_slug,
-  l.created_at,
-  l.yoshi,
-  l.zoti,
-  l.jinsi,
-  l.vazn,
   u.full_name AS seller_name,
   COALESCE(
     JSON_AGG(li.image_url)
@@ -270,12 +285,14 @@ router.get("/:id", optionalAuth, async (req, res, next) => {
   ) AS images,
   ${isFavoriteSelect}
 FROM listings l
+LEFT JOIN regions r ON l.region_id = r.id
+LEFT JOIN districts d ON l.district_id = d.id
 LEFT JOIN categories c ON c.id = l.category_id
 LEFT JOIN users u ON u.id = l.user_id
 LEFT JOIN listing_images li ON li.listing_id = l.id
 ${favoritesJoin}
 WHERE l.id = $1
-GROUP BY l.id, c.name, u.full_name`,
+GROUP BY l.id, c.name, u.full_name, r.name, d.name`,
       params
     );
     if (result.rows.length === 0) {
@@ -330,6 +347,8 @@ router.put("/:id", auth, async (req, res, next) => {
     if (req.body.price !== undefined && req.body.price !== null) raw.price = Number(req.body.price);
     if (req.body.region !== undefined) raw.region = req.body.region;
     if (req.body.district !== undefined) raw.district = req.body.district;
+    if (req.body.region_id !== undefined) raw.region_id = req.body.region_id === null || req.body.region_id === "" ? null : parseInt(req.body.region_id, 10);
+    if (req.body.district_id !== undefined) raw.district_id = req.body.district_id === null || req.body.district_id === "" ? null : parseInt(req.body.district_id, 10);
     if (req.body.phone !== undefined) raw.phone = req.body.phone;
     if (req.body.phone_visible !== undefined) raw.phone_visible = req.body.phone_visible;
     if (req.body.product_type !== undefined) raw.product_type = req.body.product_type;
@@ -342,6 +361,8 @@ router.put("/:id", auth, async (req, res, next) => {
     if (req.body.zoti !== undefined) raw.zoti = req.body.zoti;
     if (req.body.jinsi !== undefined) raw.jinsi = req.body.jinsi;
     if (req.body.vazn !== undefined) raw.vazn = req.body.vazn;
+    if (req.body.weight !== undefined) raw.weight = req.body.weight == null || req.body.weight === "" ? null : Number(req.body.weight);
+    if (req.body.unit !== undefined) raw.unit = req.body.unit == null || req.body.unit === "" ? null : req.body.unit;
 
     const parsed = updateSchema.safeParse(raw);
     if (!parsed.success) {
@@ -352,7 +373,7 @@ router.put("/:id", auth, async (req, res, next) => {
     }
 
     const data = parsed.data;
-    const allowedColumns = ["title", "description", "price", "region", "district", "phone", "phone_visible", "product_type", "category_id", "category_slug", "yoshi", "zoti", "jinsi", "vazn"];
+    const allowedColumns = ["title", "description", "price", "region", "district", "region_id", "district_id", "weight", "unit", "phone", "phone_visible", "product_type", "category_id", "category_slug", "yoshi", "zoti", "jinsi", "vazn"];
     const setParts = [];
     const setParams = [];
     let paramIdx = 1;
@@ -393,6 +414,8 @@ router.post("/", auth, async (req, res, next) => {
       price: req.body.price != null ? Number(req.body.price) : 0,
       category_id:
         req.body.category_id != null ? parseInt(req.body.category_id, 10) : null,
+      region_id: req.body.region_id != null && req.body.region_id !== "" ? parseInt(req.body.region_id, 10) : null,
+      district_id: req.body.district_id != null && req.body.district_id !== "" ? parseInt(req.body.district_id, 10) : null,
       images: Array.isArray(req.body.images) ? req.body.images : undefined,
     });
     if (!parsed.success) {
@@ -401,7 +424,7 @@ router.post("/", auth, async (req, res, next) => {
         error: parsed.error.errors[0]?.message || "Validation failed",
       });
     }
-    const { title, description, price, category_id, category_slug, region, district, phone, phone_visible, product_type, images, yoshi, zoti, jinsi, vazn } = parsed.data;
+    const { title, description, price, category_id, category_slug, region, district, region_id, district_id, weight, unit, phone, phone_visible, product_type, images, yoshi, zoti, jinsi, vazn } = parsed.data;
     const client = await pool.connect();
     const slug = (category_slug && CATEGORY_SLUGS.includes(String(category_slug).toLowerCase()))
       ? String(category_slug).toLowerCase()
@@ -410,7 +433,7 @@ router.post("/", auth, async (req, res, next) => {
       await client.query("BEGIN");
 
       const listingResult = await client.query(
-        `INSERT INTO listings (user_id, category_id, category_slug, title, description, price, region, district, phone, phone_visible, product_type, yoshi, zoti, jinsi, vazn) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING id`,
+        `INSERT INTO listings (user_id, category_id, category_slug, title, description, price, region, district, region_id, district_id, weight, unit, phone, phone_visible, product_type, yoshi, zoti, jinsi, vazn) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19) RETURNING id`,
         [
           req.user.id,
           category_id || null,
@@ -420,6 +443,10 @@ router.post("/", auth, async (req, res, next) => {
           price,
           region || "",
           district || "",
+          region_id || null,
+          district_id || null,
+          weight ?? null,
+          unit ?? null,
           phone || "",
           !!phone_visible,
           product_type || "",
