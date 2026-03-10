@@ -27,10 +27,10 @@ async function sendOtpEmail(email, code) {
     const { data, error } = await resend.emails.send({
       from: APP_FROM_EMAIL,
       to: email,
-      subject: "Molbozor tasdiqlash kodi",
+      subject: "Molbazar tasdiqlash kodi",
       html: `
         <div style="font-family: sans-serif; max-width: 400px; margin: 0 auto;">
-          <h2 style="color: #1a1a1a;">Tasdiqlash kodi</h2>
+          <h2 style="color: #1a1a1a;">Molbazar tasdiqlash kodi</h2>
           <p>Sizning tasdiqlash kodingiz:</p>
           <p style="font-size: 28px; font-weight: bold; letter-spacing: 4px; color: #0ea5e9;">${code}</p>
           <p style="color: #64748b; font-size: 14px;">Kod 10 daqiqa amal qiladi.</p>
