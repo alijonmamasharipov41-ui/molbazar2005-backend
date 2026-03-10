@@ -3,9 +3,9 @@ const APP_NAME = "Molbazar2005 Backend";
 const PORT = Number(process.env.PORT) || 3000;
 const DATABASE_URL = process.env.DATABASE_URL;
 const JWT_SECRET = process.env.JWT_SECRET;
-/** Resend: OTP email. Set RESEND_API_KEY and APP_FROM_EMAIL (e.g. "Molbozor <no-reply@yourdomain.com>") in .env */
+/** Resend: OTP email. Set RESEND_API_KEY and APP_FROM_EMAIL (e.g. "Molbazar <no-reply@molbazar.uz>") in .env */
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const APP_FROM_EMAIL = process.env.APP_FROM_EMAIL || "Molbozor <onboarding@resend.dev>";
+const APP_FROM_EMAIL = process.env.APP_FROM_EMAIL || "Molbazar <onboarding@resend.dev>";
 /** Banner/upload rasmlari uchun asosiy URL (relative yo‘llarni to‘liq qilish). Masalan: https://molbazar.uz */
 const PUBLIC_URL = process.env.PUBLIC_URL || process.env.API_BASE_URL || "https://molbazar.uz";
 
