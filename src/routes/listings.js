@@ -8,7 +8,13 @@ const router = express.Router();
 
 const CATEGORY_SLUGS = ["chorva", "parandalar", "baliqlar", "don", "yemish"];
 const regionDistrictIdSchema = z.preprocess(
-  (val) => (val === "" || val === undefined ? null : Number(val)),
+  (val) => {
+    if (val === "" || val === undefined || val === null) return null;
+    const n = Number(val);
+    // Mobile form: tanlanmagan paytida 0 yuborilishi mumkin
+    if (!Number.isFinite(n) || n <= 0) return null;
+    return n;
+  },
   z.number().int().positive().nullable().optional()
 );
 
@@ -409,13 +415,15 @@ router.put("/:id", auth, async (req, res, next) => {
 
 router.post("/", auth, async (req, res, next) => {
   try {
+    const regionIdRaw = req.body.region_id;
+    const districtIdRaw = req.body.district_id;
     const parsed = createSchema.safeParse({
       ...req.body,
       price: req.body.price != null ? Number(req.body.price) : 0,
       category_id:
         req.body.category_id != null ? parseInt(req.body.category_id, 10) : null,
-      region_id: req.body.region_id != null && req.body.region_id !== "" ? parseInt(req.body.region_id, 10) : null,
-      district_id: req.body.district_id != null && req.body.district_id !== "" ? parseInt(req.body.district_id, 10) : null,
+      region_id: regionIdRaw == null || regionIdRaw === "" ? null : parseInt(regionIdRaw, 10),
+      district_id: districtIdRaw == null || districtIdRaw === "" ? null : parseInt(districtIdRaw, 10),
       images: Array.isArray(req.body.images) ? req.body.images : undefined,
     });
     if (!parsed.success) {
