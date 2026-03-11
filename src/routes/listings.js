@@ -67,6 +67,7 @@ const updateSchema = z
     vazn: z.string().optional(),
     weight: weightSchema,
     unit: z.string().optional().nullable(),
+    images: z.array(z.string()).max(10).optional(),
   })
   .strict();
 
@@ -369,6 +370,7 @@ router.put("/:id", auth, async (req, res, next) => {
     if (req.body.vazn !== undefined) raw.vazn = req.body.vazn;
     if (req.body.weight !== undefined) raw.weight = req.body.weight == null || req.body.weight === "" ? null : Number(req.body.weight);
     if (req.body.unit !== undefined) raw.unit = req.body.unit == null || req.body.unit === "" ? null : req.body.unit;
+    if (req.body.images !== undefined) raw.images = Array.isArray(req.body.images) ? req.body.images : [];
 
     const parsed = updateSchema.safeParse(raw);
     if (!parsed.success) {
@@ -397,17 +399,63 @@ router.put("/:id", auth, async (req, res, next) => {
       paramIdx++;
     }
 
-    if (setParts.length === 0) {
+    const wantsImagesUpdate = data.images !== undefined;
+    if (setParts.length === 0 && !wantsImagesUpdate) {
       return res.status(400).json({ ok: false, error: "No fields to update" });
     }
 
-    setParams.push(id);
-    const result = await query(
-      `UPDATE listings SET ${setParts.join(", ")} WHERE id = $${paramIdx} RETURNING *`,
-      setParams
-    );
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
 
-    res.json({ ok: true, item: maskPhoneForResponse(result.rows[0]) });
+      if (setParts.length > 0) {
+        setParams.push(id);
+        await client.query(
+          `UPDATE listings SET ${setParts.join(", ")} WHERE id = $${paramIdx}`,
+          setParams
+        );
+      }
+
+      if (wantsImagesUpdate) {
+        await client.query(`DELETE FROM listing_images WHERE listing_id = $1`, [id]);
+        const images = Array.isArray(data.images) ? data.images : [];
+        for (const imageUrl of images) {
+          const url = String(imageUrl || "").trim();
+          if (!url) continue;
+          await client.query(
+            `INSERT INTO listing_images (listing_id, image_url) VALUES ($1, $2)`,
+            [id, url]
+          );
+        }
+      }
+
+      const result = await client.query(
+        `SELECT
+  l.*,
+  c.name AS category_name,
+  u.full_name AS seller_name,
+  COALESCE(
+    JSON_AGG(li.image_url)
+      FILTER (WHERE li.image_url IS NOT NULL),
+    '[]'
+  ) AS images
+FROM listings l
+LEFT JOIN categories c ON c.id = l.category_id
+LEFT JOIN users u ON u.id = l.user_id
+LEFT JOIN listing_images li ON li.listing_id = l.id
+WHERE l.id = $1
+GROUP BY l.id, c.name, u.full_name`,
+        [id]
+      );
+
+      await client.query("COMMIT");
+      res.json({ ok: true, item: maskPhoneForResponse(result.rows[0]) });
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
   } catch (err) {
     next(err);
   }
