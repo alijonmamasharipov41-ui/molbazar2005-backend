@@ -15,6 +15,7 @@ const otpRouter = require("./routes/otp");
 const adminRouter = require("./routes/admin.routes");
 const adminAnalyticsRouter = require("./routes/adminAnalytics");
 const analyticsPublicRouter = require("./routes/analyticsPublic");
+const regionsRouter = require("./routes/regions");
 const { errorHandler } = require("./middleware/error");
 
 const app = express();
@@ -41,6 +42,7 @@ api.use("/otp", otpRouter);
 api.use("/admin", adminRouter);
 api.use("/analytics", analyticsPublicRouter);
 api.use("/admin/analytics", adminAnalyticsRouter);
+api.use("/regions", regionsRouter);
 app.use("/api", api);
 
 app.use((req, res) => {

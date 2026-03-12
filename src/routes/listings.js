@@ -98,30 +98,57 @@ router.get("/", optionalAuth, async (req, res, next) => {
     const orderBy = SORT_MAP[sortKey];
 
     const search = (req.query.search ?? req.query.query)?.trim() || null;
-    const searchTerm = search ? `%${search}%` : null;
+    // Qidiruvni normalizatsiya: sheva/yozuv farqlari (qo'zli~qozli, qo'y~qoy, hisori~xisori)
+    const normalizeSearch = (s) => {
+      let t = String(s || "").toLowerCase();
+      t = t.replace(/[’‘ʻʼ`´]/g, "'"); // apostrof variantlari
+      t = t.replace(/o'/g, "o'").replace(/g'/g, "g'"); // safe no-op, readability
+      t = t.replace(/\s+/g, " ").trim();
+      // eng ko'p uchraydigan sheva/harf almashishlar
+      t = t.replace(/\bqoy\b/g, "qo'y");
+      t = t.replace(/\bqozli\b/g, "qo'zli");
+      t = t.replace(/\bxisori\b/g, "hisori");
+      t = t.replace(/\barashan\b/g, "aralash");
+      t = t.replace(/\bzot\b/g, "zoti");
+      return t;
+    };
+    const searchNorm = search ? normalizeSearch(search) : null;
+    // Full-text: plainto_tsquery wildcard ishlatmaydi (tez va "eng mos" uchun)
+    // ILIKE fallback: % va _ wildcard; foydalanuvchi matnini literal qilish uchun ekranlash
+    const escapeLike = (s) => String(s).replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+    const searchLike = searchNorm ? `%${escapeLike(searchNorm)}%` : null;
     const regionId = req.query.region_id != null && req.query.region_id !== "" ? parseInt(req.query.region_id, 10) : null;
     const districtId = req.query.district_id != null && req.query.district_id !== "" ? parseInt(req.query.district_id, 10) : null;
     const rid = !Number.isNaN(regionId) ? regionId : null;
     const did = !Number.isNaN(districtId) ? districtId : null;
 
+    // Qidiruv: full-text (search_vector) + fallback ILIKE (juda qisqa qidiruvlar uchun)
     const conditions = [
-      "(l.title ILIKE $1 OR l.description ILIKE $1 OR $1 IS NULL)",
-      "(l.region_id = $2 OR $2 IS NULL)",
-      "(l.district_id = $3 OR $3 IS NULL)",
+      "((l.search_vector @@ plainto_tsquery('simple', $1)) OR (l.title ILIKE $2 OR COALESCE(l.description,'') ILIKE $2 OR COALESCE(l.product_type,'') ILIKE $2) OR $1 IS NULL)",
+      "(l.region_id = $3 OR $3 IS NULL)",
+      "(l.district_id = $4 OR $4 IS NULL)",
     ];
-    // Query'ga: [searchTerm, region_id, district_id, ...]
-    const params = [searchTerm, rid, did];
-    let paramIndex = 4;
+    // Query'ga: [searchNorm, searchLike, region_id, district_id, ...]
+    const params = [searchNorm, searchLike, rid, did];
+    let paramIndex = 5;
 
     if (req.query.category_id != null && req.query.category_id !== "") {
       const catId = parseInt(req.query.category_id, 10);
       if (!Number.isNaN(catId)) {
-        conditions.push(`l.category_id = $${paramIndex}`);
-        params.push(catId);
-        paramIndex++;
+        const slugFromQuery = req.query.category_slug && String(req.query.category_slug).trim()
+          ? String(req.query.category_slug).trim().toLowerCase()
+          : null;
+        if (slugFromQuery && CATEGORY_SLUGS.includes(slugFromQuery)) {
+          conditions.push(`(l.category_id = $${paramIndex} OR LOWER(TRIM(l.category_slug)) = $${paramIndex + 1})`);
+          params.push(catId, slugFromQuery);
+          paramIndex += 2;
+        } else {
+          conditions.push(`(l.category_id = $${paramIndex} OR LOWER(TRIM(l.category_slug)) = (SELECT LOWER(TRIM(name)) FROM categories WHERE id = $${paramIndex}))`);
+          params.push(catId);
+          paramIndex++;
+        }
       }
-    }
-    if (req.query.category_slug && String(req.query.category_slug).trim()) {
+    } else if (req.query.category_slug && String(req.query.category_slug).trim()) {
       const slug = String(req.query.category_slug).trim().toLowerCase();
       if (CATEGORY_SLUGS.includes(slug)) {
         conditions.push(`LOWER(TRIM(l.category_slug)) = $${paramIndex}`);
@@ -170,6 +197,15 @@ router.get("/", optionalAuth, async (req, res, next) => {
       conditions.push(`l.status = $${paramIndex}`);
       params.push("approved");
       paramIndex++;
+    }
+    // Admin: status bo'yicha filtrlash (approved, pending, rejected)
+    if (isAdmin && req.query.status && String(req.query.status).trim()) {
+      const statusVal = String(req.query.status).trim().toLowerCase();
+      if (["approved", "pending", "rejected"].includes(statusVal)) {
+        conditions.push(`l.status = $${paramIndex}`);
+        params.push(statusVal);
+        paramIndex++;
+      }
     }
 
     const whereClause = conditions.length > 0 ? "WHERE " + conditions.join(" AND ") : "";
@@ -245,7 +281,13 @@ LIMIT $${limitIndex} OFFSET $${offsetIndex}`,
       listParams
     );
 
-    const items = listResult.rows.map((row) => maskPhoneForResponse(row));
+    const items = listResult.rows.map((row) => {
+      const r = maskPhoneForResponse(row);
+      if (r && (typeof r.price === "string" || r.price == null)) {
+        r.price = Number(r.price) || 0;
+      }
+      return r;
+    });
     res.json({
       ok: true,
       page,
