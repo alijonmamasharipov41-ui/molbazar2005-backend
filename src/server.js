@@ -16,14 +16,11 @@ if (isMigrate) {
       for (const file of files) {
         const sqlPath = path.join(sqlDir, file);
         if (!fs.existsSync(sqlPath)) continue;
-        const sql = fs.readFileSync(sqlPath, "utf8");
-        const statements = sql
-          .split(/;\s*\n/)
-          .map((s) => s.trim())
-          .filter((s) => s.length > 0);
-        for (const statement of statements) {
-          await query(statement + (statement.endsWith(";") ? "" : ";"));
-        }
+        const sql = fs.readFileSync(sqlPath, "utf8").trim();
+        if (!sql) continue;
+        // Execute the whole file in one go.
+        // This avoids breaking PL/pgSQL functions/triggers that contain semicolons.
+        await query(sql);
       }
       console.log("Migrations completed.");
       process.exit(0);
