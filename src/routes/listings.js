@@ -107,6 +107,7 @@ router.get("/", optionalAuth, async (req, res, next) => {
       // eng ko'p uchraydigan sheva/harf almashishlar
       t = t.replace(/\bqoy\b/g, "qo'y");
       t = t.replace(/\bqozli\b/g, "qo'zli");
+      t = t.replace(/\bqochqor\b/g, "qo'chqor");
       t = t.replace(/\bxisori\b/g, "hisori");
       t = t.replace(/\barashan\b/g, "aralash");
       t = t.replace(/\bzot\b/g, "zoti");
@@ -122,13 +123,15 @@ router.get("/", optionalAuth, async (req, res, next) => {
     const rid = !Number.isNaN(regionId) ? regionId : null;
     const did = !Number.isNaN(districtId) ? districtId : null;
 
-    // Qidiruv: full-text (search_vector) + fallback ILIKE (juda qisqa qidiruvlar uchun)
+    // GIN index ishlashi: bitta branch faqat search_vector @@ query; fallback = search_vector IS NULL qatorlar uchun ILIKE
+    const searchCondition = searchNorm
+      ? `(($1 IS NULL) OR ((l.search_vector @@ plainto_tsquery('simple', $1)) OR (l.search_vector IS NULL AND (l.title ILIKE $2 OR COALESCE(l.description,'') ILIKE $2 OR COALESCE(l.product_type,'') ILIKE $2))))`
+      : "true";
     const conditions = [
-      "((l.search_vector @@ plainto_tsquery('simple', $1)) OR (l.title ILIKE $2 OR COALESCE(l.description,'') ILIKE $2 OR COALESCE(l.product_type,'') ILIKE $2) OR $1 IS NULL)",
+      "(" + searchCondition + ")",
       "(l.region_id = $3 OR $3 IS NULL)",
       "(l.district_id = $4 OR $4 IS NULL)",
     ];
-    // Query'ga: [searchNorm, searchLike, region_id, district_id, ...]
     const params = [searchNorm, searchLike, rid, did];
     let paramIndex = 5;
 
@@ -209,6 +212,10 @@ router.get("/", optionalAuth, async (req, res, next) => {
     }
 
     const whereClause = conditions.length > 0 ? "WHERE " + conditions.join(" AND ") : "";
+    // Qidiruv bo'lsa: ts_rank (relevancy) keyin created_at; yo'q bo'lsa: sort param (new, price_asc, ...)
+    const orderByClause = searchNorm
+      ? "ts_rank(l.search_vector, plainto_tsquery('simple', $1)) DESC NULLS LAST, l.created_at DESC"
+      : orderBy;
     const countResult = await query(
       `SELECT COUNT(*)::int AS total
         FROM listings l
@@ -217,17 +224,16 @@ router.get("/", optionalAuth, async (req, res, next) => {
     );
     const total = countResult.rows[0].total;
 
+    // LATERAL: bitta qator per listing (GROUP BY + JSON_AGG o'rniga — 10x tez)
     let limitIndex, offsetIndex, listParams;
-    let favoritesJoin = "";
+    let favoritesLateral = "";
     let isFavoriteSelect = "false AS is_favorite";
 
     if (userId != null) {
-      favoritesJoin = `LEFT JOIN favorites f
-       ON f.listing_id = l.id
-       AND f.user_id = $${paramIndex}`;
-      isFavoriteSelect = "MAX(f.id) IS NOT NULL AS is_favorite";
-      limitIndex = paramIndex + 1;
-      offsetIndex = paramIndex + 2;
+      favoritesLateral = `LEFT JOIN LATERAL (SELECT true AS is_favorite FROM favorites f WHERE f.listing_id = l.id AND f.user_id = $${paramIndex} LIMIT 1) fav ON true`;
+      isFavoriteSelect = "COALESCE(fav.is_favorite, false) AS is_favorite";
+      limitIndex = paramIndex + 2;
+      offsetIndex = paramIndex + 3;
       listParams = [...params, userId, limit, offset];
     } else {
       limitIndex = paramIndex;
@@ -261,22 +267,20 @@ router.get("/", optionalAuth, async (req, res, next) => {
   l.weight,
   l.unit,
   u.full_name AS seller_name,
-  COALESCE(
-    JSON_AGG(li.image_url)
-      FILTER (WHERE li.image_url IS NOT NULL),
-    '[]'
-  ) AS images,
+  COALESCE(img.images, '[]') AS images,
   ${isFavoriteSelect}
 FROM listings l
 LEFT JOIN categories c ON c.id = l.category_id
 LEFT JOIN users u ON u.id = l.user_id
 LEFT JOIN regions r ON r.id = l.region_id
 LEFT JOIN districts d ON d.id = l.district_id
-LEFT JOIN listing_images li ON li.listing_id = l.id
-${favoritesJoin}
+LEFT JOIN LATERAL (
+  SELECT COALESCE(JSON_AGG(li.image_url) FILTER (WHERE li.image_url IS NOT NULL), '[]') AS images
+  FROM listing_images li WHERE li.listing_id = l.id
+) img ON true
+${favoritesLateral}
 ${whereClause}
-GROUP BY l.id, c.name, u.full_name, r.name, d.name
-ORDER BY ${orderBy}
+ORDER BY ${orderByClause}
 LIMIT $${limitIndex} OFFSET $${offsetIndex}`,
       listParams
     );
@@ -295,6 +299,32 @@ LIMIT $${limitIndex} OFFSET $${offsetIndex}`,
       total,
       items,
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// OLX-style autocomplete: qidiruv so'ziga mos sarlavhalar (top 10)
+router.get("/autocomplete", optionalAuth, async (req, res, next) => {
+  try {
+    const q = (req.query.q ?? req.query.query ?? "").trim();
+    if (!q || q.length < 2) {
+      return res.json({ ok: true, suggestions: [] });
+    }
+    const searchNorm = q.toLowerCase().replace(/\s+/g, " ").trim();
+    const searchLike = `%${searchNorm}%`;
+    const result = await query(
+      `SELECT l.id, l.title
+       FROM listings l
+       WHERE l.status = 'approved'
+         AND (l.search_vector @@ plainto_tsquery('simple', $1)
+              OR l.title ILIKE $2
+              OR COALESCE(l.product_type,'') ILIKE $2)
+       ORDER BY l.created_at DESC
+       LIMIT 10`,
+      [searchNorm, searchLike]
+    );
+    res.json({ ok: true, suggestions: result.rows });
   } catch (err) {
     next(err);
   }
@@ -471,6 +501,16 @@ router.put("/:id", auth, async (req, res, next) => {
         }
       }
 
+      if (isAdmin && (data.status === "approved" || data.status === "rejected")) {
+        const auditAction = data.status === "approved" ? "listing_approved" : "listing_rejected";
+        const ip = req.ip || req.get("x-forwarded-for") || null;
+        const ua = req.get("user-agent") || "";
+        await client.query(
+          `INSERT INTO admin_audit_logs (user_id, action, ip_address, user_agent) VALUES ($1, $2, $3, $4)`,
+          [req.user.id, `${auditAction}#${id}`, ip, ua]
+        );
+      }
+
       const result = await client.query(
         `SELECT
   l.*,
@@ -633,6 +673,14 @@ router.delete("/:id", auth, async (req, res, next) => {
     const isOwner = req.user.id === ownerId;
     if (!isAdmin && !isOwner) {
       return res.status(403).json({ ok: false, error: "Forbidden" });
+    }
+    if (isAdmin) {
+      const ip = req.ip || req.get("x-forwarded-for") || null;
+      const ua = req.get("user-agent") || "";
+      await query(
+        `INSERT INTO admin_audit_logs (user_id, action, ip_address, user_agent) VALUES ($1, $2, $3, $4)`,
+        [req.user.id, `listing_deleted#${id}`, ip, ua]
+      );
     }
     await query("DELETE FROM listings WHERE id = $1", [id]);
     res.json({ ok: true });

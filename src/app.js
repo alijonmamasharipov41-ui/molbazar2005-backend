@@ -1,4 +1,5 @@
 const express = require("express");
+const rateLimit = require("express-rate-limit");
 const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
@@ -24,6 +25,16 @@ app.use(express.json());
 app.use(cors());
 app.use(helmet());
 app.use(morgan("combined"));
+
+// Global rate limit: IP bo'yicha daqiqada 120 so'rov (abuse va DDoS yengillashtiradi)
+const apiLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000,
+  max: 120,
+  message: { ok: false, error: "Juda ko'p so'rov. Biroz kutib qayta urinib ko'ring." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use("/api", apiLimiter);
 
 // Barcha API marshrutlar /api prefiksi ostida (mobil ilova .../api/chat, .../api/auth kabi chaqiradi)
 const api = express.Router();

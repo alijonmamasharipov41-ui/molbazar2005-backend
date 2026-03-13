@@ -29,7 +29,7 @@ CREATE TRIGGER trg_listings_search_vector_update
 BEFORE INSERT OR UPDATE OF title, product_type, description
 ON listings
 FOR EACH ROW
-EXECUTE FUNCTION listings_search_vector_update();
+EXECUTE PROCEDURE listings_search_vector_update();
 
 CREATE INDEX IF NOT EXISTS idx_listings_search_vector
 ON listings

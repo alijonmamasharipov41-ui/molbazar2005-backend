@@ -51,6 +51,12 @@ ufw enable
 
 Faqat kerakli portlar ochiq bo'lsin.
 
+## 6. Parol (password_hash) — ilova darajasi
+
+- **Hozir:** Mobil/admin OTP orqali kirishda `users.password_hash` ixtiyoriy (NULL bo‘lishi mumkin).
+- **Register/login (telefon + parol):** `auth.js` da parol **bcrypt** (bcryptjs) bilan hash qilinadi: `bcrypt.hash(password, 10)` va tekshirishda `bcrypt.compare(password, user.password_hash)`.
+- **Kelajakda:** Agar OTP-li foydalanuvchilarga parol qo‘shilsa, yangi parolni saqlashda **har doim bcrypt** (yoki argon2) ishlatish kerak; oddiy tekst yoki boshqa hash saqlanmasin.
+
 ---
 
 Barcha o'zgarishlardan keyin **yangi SSH session** ochib, kirish ishlashini tekshiring; keyin root va parol orqali kirishni o'chiring.

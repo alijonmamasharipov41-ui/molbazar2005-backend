@@ -1,5 +1,5 @@
 const express = require("express");
-const bcrypt = require("bcryptjs");
+const bcrypt = require("bcryptjs"); // Parol hash: register/login uchun; kelajakda OTP-user uchun parol qo'shilsa ham bcrypt ishlatish
 const jwt = require("jsonwebtoken");
 const { z } = require("zod");
 const { query } = require("../db");
