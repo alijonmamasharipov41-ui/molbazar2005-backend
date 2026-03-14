@@ -210,7 +210,7 @@ router.get("/", optionalAuth, async (req, res, next) => {
     const isAdmin = req.user && req.user.role === "admin";
     const ownUserId = req.query.user_id && req.user && String(req.user.id) === String(req.query.user_id);
     if (!isAdmin && !ownUserId) {
-      conditions.push(`l.status = $${paramIndex}`);
+      conditions.push(`l.status = $${paramIndex}::text`);
       params.push("approved");
       paramIndex++;
     }
@@ -218,7 +218,7 @@ router.get("/", optionalAuth, async (req, res, next) => {
     if (isAdmin && req.query.status && String(req.query.status).trim()) {
       const statusVal = String(req.query.status).trim().toLowerCase();
       if (["approved", "pending", "rejected"].includes(statusVal)) {
-        conditions.push(`l.status = $${paramIndex}`);
+        conditions.push(`l.status = $${paramIndex}::text`);
         params.push(statusVal);
         paramIndex++;
       }
@@ -243,7 +243,7 @@ router.get("/", optionalAuth, async (req, res, next) => {
     let isFavoriteSelect = "false AS is_favorite";
 
     if (userId != null) {
-      favoritesLateral = `LEFT JOIN LATERAL (SELECT true AS is_favorite FROM favorites f WHERE f.listing_id = l.id AND f.user_id = $${paramIndex} LIMIT 1) fav ON true`;
+      favoritesLateral = `LEFT JOIN LATERAL (SELECT true AS is_favorite FROM favorites f WHERE f.listing_id = l.id AND f.user_id = $${paramIndex}::integer LIMIT 1) fav ON true`;
       isFavoriteSelect = "COALESCE(fav.is_favorite, false) AS is_favorite";
       limitIndex = paramIndex + 2;
       offsetIndex = paramIndex + 3;
@@ -294,7 +294,7 @@ LEFT JOIN LATERAL (
 ${favoritesLateral}
 ${whereClause}
 ORDER BY ${orderByClause}
-LIMIT $${limitIndex} OFFSET $${offsetIndex}`,
+LIMIT $${limitIndex}::integer OFFSET $${offsetIndex}::integer`,
       listParams
     );
 
