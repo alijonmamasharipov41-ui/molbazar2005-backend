@@ -2,6 +2,7 @@ const express = require("express");
 const { z } = require("zod");
 const { query } = require("../db");
 const { auth } = require("../middleware/auth");
+const { destroyImagesByUrls } = require("../lib/cloudinaryHelper");
 
 const router = express.Router();
 
@@ -96,6 +97,50 @@ router.patch("/me", auth, async (req, res, next) => {
     if (err.code === "23505") {
       return res.status(400).json({ ok: false, error: "Phone already in use" });
     }
+    next(err);
+  }
+});
+
+/**
+ * DELETE /api/users/me — login qilgan foydalanuvchi o'z akkauntini o'chiradi.
+ * Xavfsizlik: faqat auth middleware orqali req.user.id ishlatiladi (o'zini o'zi o'chiradi).
+ * Ketma-ketlik: 1) Foydalanuvchiga tegishli barcha e'lon rasmlarini Cloudinary'dan o'chirish,
+ * 2) users jadvalidan o'chirish (ON DELETE CASCADE orqali listings va listing_images ham o'chadi).
+ */
+router.delete("/me", auth, async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    if (!userId) {
+      return res.status(401).json({ ok: false, error: "Unauthorized" });
+    }
+
+    // 1) Foydalanuvchining barcha e'lonlaridagi rasm URL'larini olish
+    const imagesResult = await query(
+      `SELECT li.image_url
+       FROM listing_images li
+       INNER JOIN listings l ON l.id = li.listing_id
+       WHERE l.user_id = $1`,
+      [userId]
+    );
+    const urls = (imagesResult.rows || []).map((r) => r.image_url).filter(Boolean);
+
+    // 2) Cloudinary'dan o'chirish (bitta xato bo'lsa ham qolganlar davom etadi)
+    const { deleted, failed } = await destroyImagesByUrls(urls);
+    if (failed > 0) {
+      console.warn("[users] Cloudinary cleanup: some images could not be deleted", { deleted, failed });
+    }
+
+    // 3) Foydalanuvchini o'chirish — CASCADE orqali listings va listing_images ham o'chadi
+    const deleteResult = await query("DELETE FROM users WHERE id = $1 RETURNING id", [userId]);
+    if (deleteResult.rows.length === 0) {
+      return res.status(404).json({ ok: false, error: "User not found" });
+    }
+
+    res.status(200).json({
+      ok: true,
+      message: "Akkaunt o'chirildi",
+    });
+  } catch (err) {
     next(err);
   }
 });

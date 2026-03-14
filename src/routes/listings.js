@@ -3,6 +3,7 @@ const { z } = require("zod");
 const { query, pool } = require("../db");
 const { auth, optionalAuth } = require("../middleware/auth");
 const { trackEvent } = require("../analytics");
+const { destroyImagesByUrls } = require("../lib/cloudinaryHelper");
 
 const router = express.Router();
 
@@ -502,6 +503,21 @@ router.put("/:id", auth, async (req, res, next) => {
       }
 
       if (wantsImagesUpdate) {
+        // Eski rasmlar ro'yxatini olish (Cloudinary tozalash uchun)
+        const oldImagesResult = await client.query(
+          `SELECT image_url FROM listing_images WHERE listing_id = $1`,
+          [id]
+        );
+        const oldUrls = (oldImagesResult.rows || []).map((r) => r.image_url).filter(Boolean);
+        const newUrlsSet = new Set(
+          (Array.isArray(data.images) ? data.images : [])
+            .map((u) => String(u || "").trim())
+            .filter(Boolean)
+        );
+        const removedUrls = oldUrls.filter((url) => !newUrlsSet.has(url));
+        // Cloudinary'dan o'chirish (try-catch helper ichida; bitta xato umumiy jarayonni to'xtatmaydi)
+        await destroyImagesByUrls(removedUrls);
+
         await client.query(`DELETE FROM listing_images WHERE listing_id = $1`, [id]);
         const images = Array.isArray(data.images) ? data.images : [];
         for (const imageUrl of images) {

@@ -61,6 +61,8 @@ pm2 restart all
 sudo systemctl restart molbazar-backend
 ```
 
+**Eslatma:** "Akkauntni o'chirish" (DELETE /api/users/me) ishlashi uchun serverta yangi backend kodi bo‘lishi kerak. Agar ilovada akkaunt o‘chirishda "Not found" chiqsa, backendni yuqoridagi qadamlarga ko‘ra qayta deploy qiling (`git pull`, `pm2 restart`).
+
 ---
 
 ## 3. Migratsiya bajarildi-yo‘qligini tekshirish
