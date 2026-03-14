@@ -175,7 +175,7 @@ INSERT INTO districts (id, name, region_id) VALUES
   (153, 'Termiz tumani', 11),
   (154, 'Uzun', 11),
   (155, 'Sherobod', 11),
-  (156, 'Sho'rchi', 11),
+  (156, 'Sho''rchi', 11),
   (157, 'Bektemir', 12),
   (158, 'Chilonzor', 12),
   (159, 'Yashnobod', 12),

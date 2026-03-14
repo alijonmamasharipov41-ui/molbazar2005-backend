@@ -123,17 +123,30 @@ router.get("/", optionalAuth, async (req, res, next) => {
     const rid = !Number.isNaN(regionId) ? regionId : null;
     const did = !Number.isNaN(districtId) ? districtId : null;
 
-    // GIN index ishlashi: bitta branch faqat search_vector @@ query; fallback = search_vector IS NULL qatorlar uchun ILIKE
-    const searchCondition = searchNorm
-      ? `(($1 IS NULL) OR ((l.search_vector @@ plainto_tsquery('simple', $1)) OR (l.search_vector IS NULL AND (l.title ILIKE $2 OR COALESCE(l.description,'') ILIKE $2 OR COALESCE(l.product_type,'') ILIKE $2))))`
-      : "true";
-    const conditions = [
-      "(" + searchCondition + ")",
-      "(l.region_id = $3 OR $3 IS NULL)",
-      "(l.district_id = $4 OR $4 IS NULL)",
-    ];
-    const params = [searchNorm, searchLike, rid, did];
-    let paramIndex = 5;
+    // GIN index ishlashi: bitta branch faqat search_vector @@ query; fallback = search_vector IS NULL qatorlar uchun ILIKE.
+    // Parametr indekslarini qo'lda boshqaramiz: agar search bo'lmasa, $1 va $2 ishlatilmaydi.
+    const conditions = [];
+    const params = [];
+    let paramIndex = 1;
+
+    if (searchNorm) {
+      conditions.push(
+        `((l.search_vector @@ plainto_tsquery('simple', $${paramIndex})) OR ` +
+          `(l.search_vector IS NULL AND (l.title ILIKE $${paramIndex + 1} OR COALESCE(l.description,'') ILIKE $${paramIndex + 1} OR COALESCE(l.product_type,'') ILIKE $${paramIndex + 1})))`
+      );
+      params.push(searchNorm, searchLike);
+      paramIndex += 2;
+    } else {
+      conditions.push("true");
+    }
+
+    conditions.push(`(l.region_id = $${paramIndex} OR $${paramIndex} IS NULL)`);
+    params.push(rid);
+    paramIndex++;
+
+    conditions.push(`(l.district_id = $${paramIndex} OR $${paramIndex} IS NULL)`);
+    params.push(did);
+    paramIndex++;
 
     if (req.query.category_id != null && req.query.category_id !== "") {
       const catId = parseInt(req.query.category_id, 10);
@@ -214,7 +227,7 @@ router.get("/", optionalAuth, async (req, res, next) => {
     const whereClause = conditions.length > 0 ? "WHERE " + conditions.join(" AND ") : "";
     // Qidiruv bo'lsa: ts_rank (relevancy) keyin created_at; yo'q bo'lsa: sort param (new, price_asc, ...)
     const orderByClause = searchNorm
-      ? "ts_rank(l.search_vector, plainto_tsquery('simple', $1)) DESC NULLS LAST, l.created_at DESC"
+      ? `ts_rank(l.search_vector, plainto_tsquery('simple', $1)) DESC NULLS LAST, l.created_at DESC`
       : orderBy;
     const countResult = await query(
       `SELECT COUNT(*)::int AS total
