@@ -140,11 +140,11 @@ router.get("/", optionalAuth, async (req, res, next) => {
       conditions.push("true");
     }
 
-    conditions.push(`(l.region_id = $${paramIndex} OR $${paramIndex} IS NULL)`);
+    conditions.push(`(l.region_id = $${paramIndex} OR ($${paramIndex}::integer IS NULL))`);
     params.push(rid);
     paramIndex++;
 
-    conditions.push(`(l.district_id = $${paramIndex} OR $${paramIndex} IS NULL)`);
+    conditions.push(`(l.district_id = $${paramIndex} OR ($${paramIndex}::integer IS NULL))`);
     params.push(did);
     paramIndex++;
 
