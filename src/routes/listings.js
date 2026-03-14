@@ -242,16 +242,16 @@ router.get("/", optionalAuth, async (req, res, next) => {
     let favoritesLateral = "";
     let isFavoriteSelect = "false AS is_favorite";
 
+    // LIMIT/OFFSET — raqam sifatida (page/limit allaqachon tekshirilgan), parametr tipi muammosini oldini olish
+    const limitNum = Math.max(1, Math.min(100, Number(limit) || 20));
+    const offsetNum = Math.max(0, Number(offset) || 0);
+
     if (userId != null) {
       favoritesLateral = `LEFT JOIN LATERAL (SELECT true AS is_favorite FROM favorites f WHERE f.listing_id = l.id AND f.user_id = $${paramIndex}::integer LIMIT 1) fav ON true`;
       isFavoriteSelect = "COALESCE(fav.is_favorite, false) AS is_favorite";
-      limitIndex = paramIndex + 2;
-      offsetIndex = paramIndex + 3;
-      listParams = [...params, userId, limit, offset];
+      listParams = [...params, userId];
     } else {
-      limitIndex = paramIndex;
-      offsetIndex = paramIndex + 1;
-      listParams = [...params, limit, offset];
+      listParams = [...params];
     }
 
     const listResult = await query(
@@ -294,7 +294,7 @@ LEFT JOIN LATERAL (
 ${favoritesLateral}
 ${whereClause}
 ORDER BY ${orderByClause}
-LIMIT $${limitIndex}::integer OFFSET $${offsetIndex}::integer`,
+LIMIT ${limitNum} OFFSET ${offsetNum}`,
       listParams
     );
 
