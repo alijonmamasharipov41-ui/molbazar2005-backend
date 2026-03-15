@@ -42,19 +42,19 @@ router.post("/", auth, upload.single("image"), async (req, res, next) => {
       });
     }
 
+    // listings va avatars — barcha avtorizatsiyadan o'tgan foydalanuvchilar; banners — faqat admin
     let folder = "listings";
-    if (req.body.folder && allowedFolders.includes(req.body.folder)) {
-      if (req.body.folder === "listings") {
-        folder = "listings";
-      } else {
-        if (req.user.role !== "admin") {
-          return res.status(403).json({
-            ok: false,
-            error: "Faqat admin yuklashi mumkin",
-          });
-        }
-        folder = req.body.folder;
+    const requestedFolder = req.body.folder && String(req.body.folder).trim();
+    if (requestedFolder === "avatars" || requestedFolder === "listings") {
+      folder = requestedFolder;
+    } else if (allowedFolders.includes(requestedFolder)) {
+      if (req.user.role !== "admin") {
+        return res.status(403).json({
+          ok: false,
+          error: "Faqat admin yuklashi mumkin",
+        });
       }
+      folder = requestedFolder;
     }
 
     const uploadToCloudinary = () =>
