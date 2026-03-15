@@ -14,9 +14,11 @@ const chatRouter = require("./routes/chat");
 const bannersRouter = require("./routes/banners");
 const otpRouter = require("./routes/otp");
 const adminRouter = require("./routes/admin.routes");
+const adminSupportRouter = require("./routes/adminSupport");
 const adminAnalyticsRouter = require("./routes/adminAnalytics");
 const analyticsPublicRouter = require("./routes/analyticsPublic");
 const regionsRouter = require("./routes/regions");
+const supportRouter = require("./routes/support");
 const { errorHandler } = require("./middleware/error");
 
 const app = express();
@@ -50,9 +52,11 @@ api.use("/favorites", favoritesRouter);
 api.use("/chat", chatRouter);
 api.use("/banners", bannersRouter);
 api.use("/otp", otpRouter);
+api.use("/admin/support", adminSupportRouter);
+api.use("/admin/analytics", adminAnalyticsRouter);
 api.use("/admin", adminRouter);
 api.use("/analytics", analyticsPublicRouter);
-api.use("/admin/analytics", adminAnalyticsRouter);
+api.use("/support", supportRouter);
 api.use("/regions", regionsRouter);
 app.use("/api", api);
 

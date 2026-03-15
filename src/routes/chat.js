@@ -62,13 +62,14 @@ router.get("/", auth, async (req, res, next) => {
     const listResult = await query(
       `SELECT
   c.id AS conversation_id,
-  l.title AS listing_title,
+  COALESCE(l.title, 'Yordam markazi') AS listing_title,
   u_other.full_name AS other_user_name,
   last_msg.body AS last_message,
   last_msg.created_at AS last_message_time,
-  COALESCE(unread.cnt, 0)::int AS unread_count
+  COALESCE(unread.cnt, 0)::int AS unread_count,
+  c.type AS conversation_type
 FROM conversations c
-INNER JOIN listings l ON l.id = c.listing_id
+LEFT JOIN listings l ON l.id = c.listing_id
 INNER JOIN users u_other ON u_other.id = CASE WHEN c.buyer_id = $1 THEN c.seller_id ELSE c.buyer_id END
 LEFT JOIN LATERAL (
   SELECT m.body, m.created_at

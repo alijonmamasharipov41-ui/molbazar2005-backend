@@ -81,7 +81,49 @@ node src/server.js --migrate
 
 ---
 
-## 4. Admin panel (VPS da host qilinsa)
+## 4. Admin panelga kirish: "Admin topilmadi" — emailni admin qilish (VPS da)
+
+Admin panel faqat bazada `role = 'admin'` bo‘lgan emailga kod yuboradi. Agar "Admin topilmadi yoki ruxsat yo'q" chiqsa, VPS da **backend papkasida** quyidagilarni bajaring.
+
+**Muhim:** SSH orqali VPS ga kirgansiz — yo‘llar Linux (masalan `~/molbazar2005-backend`), Mac yo‘li (`/Users/macbookair/...`) VPS da yo‘q.
+
+```bash
+# 1) Backend papkasiga o‘ting (VPS dagi yo‘l)
+cd ~/molbazar2005-backend
+# agar boshqa joyda bo‘lsa: cd /var/www/molbazar2005-backend
+
+# 2) .env dan DATABASE_URL ni yuklash (shu shell uchun)
+set -a
+source .env
+set +a
+
+# 3) Bazaga ulanishni tekshirish (role ustuni bor-yo‘q)
+psql "$DATABASE_URL" -c "\d users"
+
+# 4) Emailingizning roli
+psql "$DATABASE_URL" -c "SELECT id, email, role FROM users WHERE email = 'alijonmamasharipov41@gmail.com';"
+
+# 5) Admin qilish (emailni o‘zingiznikiga almashtiring)
+psql "$DATABASE_URL" -c "UPDATE users SET role = 'admin' WHERE email = 'alijonmamasharipov41@gmail.com';"
+
+# 6) Tekshirish
+psql "$DATABASE_URL" -c "SELECT id, email, role FROM users WHERE email = 'alijonmamasharipov41@gmail.com';"
+```
+
+**Nima uchun admin yo‘qoladi?** Ilovada "Akkauntni o'chirish" bosilsa — bazadan user o‘chadi. Xuddi shu email bilan qayta ro‘yxatdan o‘tganda yangi user `role = 'user'` bilan yaratiladi. Shuning uchun qayta admin qilish kerak (yuqoridagi 5-qadam) yoki `.env` da `ADMIN_EMAILS=alijonmamasharipov41@gmail.com` qo‘ying — keyingi yangi ro‘yxatdan o‘tishda avtomatik admin beriladi.
+
+Agar `source .env` ishlamasa (sintaksis xato), tekshiring: `.env` da maxsus belgilar (masalan `<`, `>`, bo‘shliq) bo‘lgan qiymatlar **qo‘shtirnoq** ichida bo‘lishi kerak. Masalan: `APP_FROM_EMAIL="Molbazar <otp@molbazar.uz>"`. Tuzatgach, yoki `DATABASE_URL` ni qo‘lda o‘rnating:
+
+```bash
+export DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/DATABASE"
+# Keyin: psql "$DATABASE_URL" -c "SELECT ..."
+```
+
+`.env` faylida `DATABASE_URL=postgresql://...` qatorini ko‘chirib, `export DATABASE_URL="..."` qilib ishlating.
+
+---
+
+## 5. Admin panel (VPS da host qilinsa)
 
 Agar admin panel ham VPS da (Next.js build) ishlayotgan bo‘lsa:
 
@@ -96,7 +138,7 @@ pm2 restart admin
 
 ---
 
-## 5. Mobil ilova
+## 6. Mobil ilova
 
 - **Expo / EAS:** yangi build yoki OTA yangilanish chiqarib, foydalanuvchilarga yangi versiyani yuklashni taklif qiling.
 - **Lokal test:** `npx expo start` — API endi VPS dagi backendga ulanadi (`.env` da `EXPO_PUBLIC_API_URL` / `EXPO_PUBLIC_API_BASE_URL` = `https://molbazar.uz/api`).

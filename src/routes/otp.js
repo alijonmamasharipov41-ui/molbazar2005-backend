@@ -3,7 +3,7 @@ const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
 const { z } = require("zod");
 const { query } = require("../db");
-const { JWT_SECRET } = require("../config");
+const { JWT_SECRET, ADMIN_EMAILS } = require("../config");
 const { sendOtpEmail } = require("../services/resend");
 const { trackEvent } = require("../analytics");
 
@@ -137,10 +137,11 @@ async function handleVerify(req, res, next) {
       user = userResult.rows[0];
     } else {
       const fullName = normalizedEmail.split("@")[0] || "Foydalanuvchi";
+      const role = ADMIN_EMAILS.length && ADMIN_EMAILS.includes(normalizedEmail) ? "admin" : "user";
       const insertResult = await query(
         `INSERT INTO users (email, full_name, role) VALUES ($1, $2, $3)
          RETURNING id, email, role, full_name, phone, avatar_url, created_at, COALESCE(token_version, 0) AS token_version`,
-        [normalizedEmail, fullName, "user"]
+        [normalizedEmail, fullName, role]
       );
       user = insertResult.rows[0];
     }

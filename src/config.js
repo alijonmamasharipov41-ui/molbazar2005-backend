@@ -9,6 +9,12 @@ const APP_FROM_EMAIL = process.env.APP_FROM_EMAIL || "Molbazar <onboarding@resen
 /** Banner/upload rasmlari uchun asosiy URL (relative yo‘llarni to‘liq qilish). Masalan: https://molbazar.uz */
 const PUBLIC_URL = process.env.PUBLIC_URL || process.env.API_BASE_URL || "https://molbazar.uz";
 
+/** Admin emaillar (vergul bilan). Yangi ro'yxatdan o'tganda shu email bo'lsa role=admin beriladi. */
+const ADMIN_EMAILS_RAW = process.env.ADMIN_EMAILS || "";
+const ADMIN_EMAILS = ADMIN_EMAILS_RAW
+  ? ADMIN_EMAILS_RAW.split(",").map((e) => e.trim().toLowerCase()).filter(Boolean)
+  : [];
+
 if (!DATABASE_URL) {
   throw new Error("DATABASE_URL is required. Set it in .env");
 }
@@ -24,4 +30,5 @@ module.exports = {
   RESEND_API_KEY,
   APP_FROM_EMAIL,
   PUBLIC_URL,
+  ADMIN_EMAILS,
 };

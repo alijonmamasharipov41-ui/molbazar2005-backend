@@ -59,4 +59,10 @@ async function optionalAuth(req, res, next) {
   next();
 }
 
-module.exports = { auth, optionalAuth };
+/** Admin sahifasi uchun: auth dan keyin chaqiriladi, role === "admin" bo'lishi kerak */
+function isAdmin(req, res, next) {
+  if (req.user && req.user.role === "admin") return next();
+  return res.status(403).json({ ok: false, error: "Admin only" });
+}
+
+module.exports = { auth, optionalAuth, isAdmin };
