@@ -170,13 +170,52 @@ router.get("/", optionalAuth, async (req, res, next) => {
       conditions.push("true");
     }
 
-    conditions.push(`(l.region_id = $${paramIndex} OR ($${paramIndex}::integer IS NULL))`);
-    params.push(rid);
-    paramIndex++;
+    /**
+     * Viloyat/tuman filtri:
+     * - Ko‘p e‘lonlarda faqat matn (l.region / l.district) bor, region_id/district_id NULL (mobil forma).
+     * - Qidiruv esa API dan id yuboradi. Shuning uchun: id mos kelishi YOKI matn jadvaldagi nom bilan mos kelishi kerak.
+     * - Agar id berilgan bo‘lsa, qo‘shimcha `?region=Samarqand viloyati` qat’iy tengligi ikkala shart AND bo‘lib
+     *   "Samarqand" saqlangan qatorni chiqarib yuborardi — shu sabab id bo‘lsa matn filtrini shu yerda qo‘llamaymiz.
+     */
+    if (rid != null) {
+      conditions.push(`(
+        l.region_id = $${paramIndex}
+        OR (
+          l.region_id IS NULL
+          AND EXISTS (
+            SELECT 1 FROM regions r
+            WHERE r.id = $${paramIndex}
+              AND (
+                LOWER(TRIM(l.region)) = LOWER(TRIM(r.name))
+                OR LOWER(TRIM(l.region)) = LOWER(TRIM(regexp_replace(r.name, E'\\s+viloyati$', '')))
+                OR LOWER(TRIM(l.region)) = LOWER(TRIM(regexp_replace(r.name, E'\\s+Respublikasi$', '')))
+              )
+          )
+        )
+      )`);
+      params.push(rid);
+      paramIndex++;
+    } else {
+      conditions.push("true");
+    }
 
-    conditions.push(`(l.district_id = $${paramIndex} OR ($${paramIndex}::integer IS NULL))`);
-    params.push(did);
-    paramIndex++;
+    if (did != null) {
+      conditions.push(`(
+        l.district_id = $${paramIndex}
+        OR (
+          l.district_id IS NULL
+          AND EXISTS (
+            SELECT 1 FROM districts d
+            WHERE d.id = $${paramIndex}
+              AND LOWER(TRIM(l.district)) = LOWER(TRIM(d.name))
+          )
+        )
+      )`);
+      params.push(did);
+      paramIndex++;
+    } else {
+      conditions.push("true");
+    }
 
     if (req.query.category_id != null && req.query.category_id !== "") {
       const catId = parseInt(req.query.category_id, 10);
@@ -205,13 +244,13 @@ router.get("/", optionalAuth, async (req, res, next) => {
         conditions.push("false");
       }
     }
-    if (req.query.region && String(req.query.region).trim()) {
-      conditions.push(`l.region = $${paramIndex}`);
+    if (rid == null && req.query.region && String(req.query.region).trim()) {
+      conditions.push(`LOWER(TRIM(l.region)) = LOWER(TRIM($${paramIndex}::text))`);
       params.push(String(req.query.region).trim());
       paramIndex++;
     }
-    if (req.query.district && String(req.query.district).trim()) {
-      conditions.push(`l.district = $${paramIndex}`);
+    if (did == null && req.query.district && String(req.query.district).trim()) {
+      conditions.push(`LOWER(TRIM(l.district)) = LOWER(TRIM($${paramIndex}::text))`);
       params.push(String(req.query.district).trim());
       paramIndex++;
     }
