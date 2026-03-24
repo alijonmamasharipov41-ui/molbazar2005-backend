@@ -2,7 +2,7 @@ const express = require("express");
 const { z } = require("zod");
 const { query } = require("../db");
 const { auth } = require("../middleware/auth");
-const { destroyImagesByUrls } = require("../lib/cloudinaryHelper");
+const { destroyImagesByUrls, getPublicIdFromUrl } = require("../lib/cloudinaryHelper");
 
 const router = express.Router();
 
@@ -72,6 +72,20 @@ router.patch("/me", auth, async (req, res, next) => {
     }
 
     const allowed = { full_name: true, phone: true, avatar_url: true };
+    // Yangi avatar yuklanayotgan bo'lsa, eski avatarni Cloudinary'dan o'chiramiz
+    if (data.avatar_url !== undefined) {
+      const oldUser = await query(
+        `SELECT avatar_url FROM users WHERE id = $1`,
+        [req.user.id]
+      );
+      const oldUrl = oldUser.rows[0]?.avatar_url;
+      if (oldUrl && getPublicIdFromUrl(oldUrl)) {
+        const { deleted, failed } = await destroyImagesByUrls([oldUrl]);
+        if (failed > 0) {
+          console.warn("[users] PATCH /me: eski avatar o'chirishda xato", { deleted, failed });
+        }
+      }
+    }
     const setParts = [];
     const params = [];
     let idx = 1;

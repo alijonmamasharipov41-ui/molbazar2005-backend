@@ -7,10 +7,15 @@ const router = express.Router();
 
 /** Bosh sahifada banner tagida ko'rsatiladigan kategoriyalar (bozor bo'limi tepasida). "Bozor" so'zi nomda yo'q. */
 const HOME_CATEGORIES = [
-  { slug: "chorva", name: "Chorva", icon: "🐄" },
+  { slug: "ot", name: "Ot", icon: "🐎" },
+  { slug: "echki", name: "Echki", icon: "🐐" },
+  { slug: "qoramol", name: "Qoramol", icon: "🐮" },
+  { slug: "qoy", name: "Qo'y", icon: "🐑" },
+  { slug: "tuya", name: "Tuya", icon: "🐫" },
   { slug: "parandalar", name: "Paranda", icon: "🐔" },
   { slug: "baliqlar", name: "Baliq", icon: "🐟" },
-  { slug: "yemish", name: "Yem-yemish", icon: "🥬" },
+  { slug: "don", name: "Yem", icon: "🌾" },
+  { slug: "yemish", name: "Yemish", icon: "🥬" },
 ];
 
 const createSchema = z.object({
@@ -18,7 +23,7 @@ const createSchema = z.object({
   parent_id: z.number().int().positive().optional().nullable(),
 });
 
-/** GET /api/categories/home — mobil: banner tagida kategoriya ikonkalari uchun (chorva, paranda, baliq, yem-yemish) */
+/** GET /api/categories/home — mobil: banner tagida kategoriya ikonkalari uchun (ot, echki, qoramol, qoy, tuya, …) */
 router.get("/home", optionalAuth, async (req, res, next) => {
   try {
     res.json({ ok: true, items: HOME_CATEGORIES });

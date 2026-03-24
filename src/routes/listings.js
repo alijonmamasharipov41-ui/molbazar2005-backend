@@ -7,7 +7,25 @@ const { destroyImagesByUrls } = require("../lib/cloudinaryHelper");
 
 const router = express.Router();
 
-const CATEGORY_SLUGS = ["chorva", "parandalar", "baliqlar", "don", "yemish"];
+/** Ilova slug lari — yangisi qo‘shilsa shu ro‘yxat va DB categories bilan mos tutilsin (chorva yo‘q; ot alohida) */
+const CATEGORY_SLUGS = [
+  "ot",
+  "parandalar",
+  "baliqlar",
+  "don",
+  "yemish",
+  "echki",
+  "qoramol",
+  "qoy",
+  "tuya",
+];
+
+/** Eski klientlar `chorva` yuborsa yoki DB da qolgan bo‘lsa — `ot` ga */
+function normalizeCategorySlugInput(raw) {
+  if (raw == null || raw === "") return "";
+  const s = String(raw).trim().toLowerCase();
+  return s === "chorva" ? "ot" : s;
+}
 const regionDistrictIdSchema = z.preprocess(
   (val) => {
     if (val === "" || val === undefined || val === null) return null;
@@ -35,7 +53,12 @@ const createSchema = z.object({
   region_id: regionDistrictIdSchema,
   district_id: regionDistrictIdSchema,
   phone: z.string().optional().default(""),
-  phone_visible: z.boolean().optional().default(false),
+  /** Mijozlar telefon bilan bog‘lanishi uchun rozilik — majburiy */
+  phone_visible: z
+    .boolean({ required_error: "Telefon raqamingizni mijozlarga ko‘rsatishga rozilik majburiy" })
+    .refine((v) => v === true, {
+      message: "E‘lon joylash uchun rozilikni yoqing (telefon raqam mijozlarga ko‘rinadi)",
+    }),
   product_type: z.string().optional().default(""),
   images: z.array(z.string()).max(10).optional(),
   yoshi: z.string().optional().default(""),
@@ -57,7 +80,13 @@ const updateSchema = z
     region_id: regionDistrictIdSchema,
     district_id: regionDistrictIdSchema,
     phone: z.string().optional(),
-    phone_visible: z.boolean().optional(),
+    /** Yuborilsa faqat true — false yuborish mumkin emas */
+    phone_visible: z
+      .boolean()
+      .optional()
+      .refine((v) => v === undefined || v === true, {
+        message: "Telefon raqamini yashirish (phone_visible: false) qo‘llab-quvvatlanmaydi",
+      }),
     product_type: z.string().optional(),
     category_id: z.number().int().positive().nullable().optional(),
     category_slug: z.string().optional(),
@@ -153,7 +182,7 @@ router.get("/", optionalAuth, async (req, res, next) => {
       const catId = parseInt(req.query.category_id, 10);
       if (!Number.isNaN(catId)) {
         const slugFromQuery = req.query.category_slug && String(req.query.category_slug).trim()
-          ? String(req.query.category_slug).trim().toLowerCase()
+          ? normalizeCategorySlugInput(req.query.category_slug)
           : null;
         if (slugFromQuery && CATEGORY_SLUGS.includes(slugFromQuery)) {
           conditions.push(`(l.category_id = $${paramIndex} OR LOWER(TRIM(l.category_slug)) = $${paramIndex + 1})`);
@@ -166,11 +195,14 @@ router.get("/", optionalAuth, async (req, res, next) => {
         }
       }
     } else if (req.query.category_slug && String(req.query.category_slug).trim()) {
-      const slug = String(req.query.category_slug).trim().toLowerCase();
+      const slug = normalizeCategorySlugInput(req.query.category_slug);
       if (CATEGORY_SLUGS.includes(slug)) {
         conditions.push(`LOWER(TRIM(l.category_slug)) = $${paramIndex}`);
         params.push(slug);
         paramIndex++;
+      } else {
+        // Noma’lum slug — filtr qo‘llanmasa barcha e‘lonlar chiqib ketardi
+        conditions.push("false");
       }
     }
     if (req.query.region && String(req.query.region).trim()) {
@@ -467,6 +499,10 @@ router.put("/:id", auth, async (req, res, next) => {
     }
 
     const data = parsed.data;
+    if (data.category_slug !== undefined) {
+      const s = normalizeCategorySlugInput(data.category_slug);
+      data.category_slug = CATEGORY_SLUGS.includes(s) ? s : "";
+    }
     const allowedColumns = ["title", "description", "price", "region", "district", "region_id", "district_id", "weight", "unit", "phone", "phone_visible", "product_type", "category_id", "category_slug", "yoshi", "zoti", "jinsi", "vazn"];
     const setParts = [];
     const setParams = [];
@@ -593,9 +629,8 @@ router.post("/", auth, async (req, res, next) => {
     }
     const { title, description, price, category_id, category_slug, region, district, region_id, district_id, weight, unit, phone, phone_visible, product_type, images, yoshi, zoti, jinsi, vazn } = parsed.data;
     const client = await pool.connect();
-    const slug = (category_slug && CATEGORY_SLUGS.includes(String(category_slug).toLowerCase()))
-      ? String(category_slug).toLowerCase()
-      : "";
+    const normalizedSlug = normalizeCategorySlugInput(category_slug);
+    const slug = normalizedSlug && CATEGORY_SLUGS.includes(normalizedSlug) ? normalizedSlug : "";
     try {
       await client.query("BEGIN");
 
