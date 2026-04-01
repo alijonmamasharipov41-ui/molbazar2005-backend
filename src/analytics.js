@@ -53,4 +53,31 @@ async function trackEvent(opts) {
   }
 }
 
-module.exports = { trackEvent };
+/**
+ * Ilova ochilishi: bir xil qurilma bir kunda bir marta "noyob" qator, qayta kirishlar session_opens ga qo‘shiladi.
+ * @param {string} clientId — mobil AsyncStorage UUID (8…128 belgi)
+ * @param {number|null} userId — JWT dan (ixtiyoriy)
+ */
+async function trackAppOpenByClient(clientId, userId) {
+  const safe = String(clientId || "")
+    .replace(/[^a-zA-Z0-9_-]/g, "")
+    .slice(0, 128);
+  if (safe.length < 8) return;
+
+  const day = new Date().toISOString().slice(0, 10);
+  try {
+    await query(
+      `INSERT INTO analytics_app_client_day (day, client_id, user_id, session_opens)
+       VALUES ($1::date, $2, $3, 1)
+       ON CONFLICT (day, client_id) DO UPDATE SET
+         session_opens = analytics_app_client_day.session_opens + 1,
+         user_id = COALESCE(EXCLUDED.user_id, analytics_app_client_day.user_id),
+         updated_at = NOW()`,
+      [day, safe, userId ?? null]
+    );
+  } catch (err) {
+    console.error("[analytics] trackAppOpenByClient error:", err.message);
+  }
+}
+
+module.exports = { trackEvent, trackAppOpenByClient };
