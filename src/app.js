@@ -19,6 +19,7 @@ const adminAnalyticsRouter = require("./routes/adminAnalytics");
 const analyticsPublicRouter = require("./routes/analyticsPublic");
 const regionsRouter = require("./routes/regions");
 const supportRouter = require("./routes/support");
+const legalRouter = require("./routes/legal");
 const { errorHandler } = require("./middleware/error");
 
 const app = express();
@@ -57,8 +58,16 @@ api.use("/admin/analytics", adminAnalyticsRouter);
 api.use("/admin", adminRouter);
 api.use("/analytics", analyticsPublicRouter);
 api.use("/support", supportRouter);
+api.use("/legal", legalRouter);
 api.use("/regions", regionsRouter);
 app.use("/api", api);
+
+/**
+ * Nginx: `location /api/ { proxy_pass http://127.0.0.1:PORT/; }` bo‘lsa, tashqi
+ * `/api/legal/terms` ichki Node ga `/legal/terms` sifatida keladi — shu uchun
+ * `legalRouter` ni `/api` dan tashqari ham ulash kerak.
+ */
+app.use("/legal", legalRouter);
 
 app.use((req, res) => {
   res.status(404).json({ ok: false, error: "Not found" });

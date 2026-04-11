@@ -244,6 +244,16 @@ router.get("/", optionalAuth, async (req, res, next) => {
         conditions.push("false");
       }
     }
+    /** E'lon ichki lenta: faqat bo‘lim chegarasida (category_slug yoki category_id bo‘lsa) */
+    const hasCategoryScope =
+      (req.query.category_id != null && req.query.category_id !== "") ||
+      (req.query.category_slug && String(req.query.category_slug).trim());
+    if (hasCategoryScope && req.query.product_type != null && String(req.query.product_type).trim() !== "") {
+      const pt = String(req.query.product_type).trim();
+      conditions.push(`LOWER(TRIM(COALESCE(l.product_type, ''))) = LOWER(TRIM($${paramIndex}::text))`);
+      params.push(pt);
+      paramIndex++;
+    }
     if (rid == null && req.query.region && String(req.query.region).trim()) {
       conditions.push(`LOWER(TRIM(l.region)) = LOWER(TRIM($${paramIndex}::text))`);
       params.push(String(req.query.region).trim());

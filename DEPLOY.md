@@ -63,6 +63,8 @@ sudo systemctl restart molbazar-backend
 
 **Eslatma:** "Akkauntni o'chirish" (DELETE /api/users/me) ishlashi uchun serverta yangi backend kodi bo‘lishi kerak. Agar ilovada akkaunt o‘chirishda "Not found" chiqsa, backendni yuqoridagi qadamlarga ko‘ra qayta deploy qiling (`git pull`, `pm2 restart`).
 
+**Foydalanuvchi shartlari (404):** Ilova `GET …/api/legal/terms` chaqiradi. VPS da `git pull` + `pm2 restart` qiling. Tekshirish: `curl -sS "https://molbazar.uz/api/legal/terms" | head -c 200` — JSON da `title` va `html` bo‘lishi kerak. Nginx `/api` ni kesib yuborsa, backend `app.js` da `app.use("/legal", legalRouter)` bilan `/legal/terms` ham qabul qiladi (yangi kodni deploy qiling).
+
 ---
 
 ## 3. Migratsiya bajarildi-yo‘qligini tekshirish
