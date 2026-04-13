@@ -1,4 +1,5 @@
 const express = require("express");
+const rateLimit = require("express-rate-limit");
 const bcrypt = require("bcryptjs"); // Parol hash: register/login uchun; kelajakda OTP-user uchun parol qo'shilsa ham bcrypt ishlatish
 const jwt = require("jsonwebtoken");
 const { z } = require("zod");
@@ -9,10 +10,49 @@ const { handleVerify } = require("./otp");
 
 const router = express.Router();
 
+/** Telefon + parol: bruteforsni yengillashtirish (IP bo'yicha) */
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => {
+    res.status(429).json({
+      ok: false,
+      error: "Juda ko'p kirish urinishi. 15 daqiqadan keyin qayta urinib ko'ring.",
+    });
+  },
+});
+
+/** Ro'yxatdan o'tish spamini cheklash */
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => {
+    res.status(429).json({
+      ok: false,
+      error: "Juda ko'p ro'yxatdan o'tish urinishi. 1 soatdan keyin qayta urinib ko'ring.",
+    });
+  },
+});
+
+const passwordField = z
+  .string()
+  .min(8, "Parol kamida 8 ta belgidan iborat bo'lishi kerak")
+  .max(128, "Parol juda uzun (maksimum 128 belgi)")
+  .refine((p) => /\p{L}/u.test(p), {
+    message: "Parolda kamida bitta harf bo'lishi kerak",
+  })
+  .refine((p) => /\d/.test(p), {
+    message: "Parolda kamida bitta raqam bo'lishi kerak",
+  });
+
 const registerSchema = z.object({
   full_name: z.string().min(1, "full_name required"),
   phone: z.string().min(1, "phone required"),
-  password: z.string().min(6, "password min 6 chars"),
+  password: passwordField,
 });
 
 const loginSchema = z.object({
@@ -20,7 +60,7 @@ const loginSchema = z.object({
   password: z.string().min(1, "password required"),
 });
 
-router.post("/register", async (req, res, next) => {
+router.post("/register", registerLimiter, async (req, res, next) => {
   try {
     const parsed = registerSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -44,7 +84,7 @@ router.post("/register", async (req, res, next) => {
   }
 });
 
-router.post("/login", async (req, res, next) => {
+router.post("/login", loginLimiter, async (req, res, next) => {
   try {
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) {

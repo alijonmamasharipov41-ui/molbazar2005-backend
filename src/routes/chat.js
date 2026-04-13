@@ -5,6 +5,13 @@ const { trackEvent } = require("../analytics");
 
 const router = express.Router();
 
+/** Xabar matni: DoS / juda katta yukni cheklash */
+const MAX_MESSAGE_BODY = 4000;
+
+function sameUser(a, b) {
+  return Number(a) === Number(b);
+}
+
 router.post("/:listingId", auth, async (req, res, next) => {
   try {
     const listingId = parseInt(req.params.listingId, 10);
@@ -20,7 +27,7 @@ router.post("/:listingId", auth, async (req, res, next) => {
     }
     const sellerId = listing.rows[0].user_id;
     const buyerId = req.user.id;
-    if (sellerId === buyerId) {
+    if (sameUser(sellerId, buyerId)) {
       return res.status(400).json({ ok: false, error: "Cannot chat with yourself" });
     }
     const existing = await query(
@@ -118,7 +125,7 @@ router.get("/:conversationId/messages", auth, async (req, res, next) => {
     }
     const { buyer_id, seller_id } = conv.rows[0];
     const userId = req.user.id;
-    if (userId !== buyer_id && userId !== seller_id) {
+    if (!sameUser(userId, buyer_id) && !sameUser(userId, seller_id)) {
       return res.status(403).json({ ok: false, error: "Forbidden" });
     }
 
@@ -172,6 +179,12 @@ router.post("/:conversationId/messages", auth, async (req, res, next) => {
     if (!body) {
       return res.status(400).json({ ok: false, error: "body required" });
     }
+    if (body.length > MAX_MESSAGE_BODY) {
+      return res.status(400).json({
+        ok: false,
+        error: `Xabar juda uzun (maksimum ${MAX_MESSAGE_BODY} belgi)`,
+      });
+    }
     const conv = await query(
       `SELECT buyer_id, seller_id FROM conversations WHERE id = $1`,
       [conversationId]
@@ -181,7 +194,7 @@ router.post("/:conversationId/messages", auth, async (req, res, next) => {
     }
     const { buyer_id, seller_id } = conv.rows[0];
     const userId = req.user.id;
-    if (userId !== buyer_id && userId !== seller_id) {
+    if (!sameUser(userId, buyer_id) && !sameUser(userId, seller_id)) {
       return res.status(403).json({ ok: false, error: "Forbidden" });
     }
 

@@ -24,6 +24,9 @@ const { errorHandler } = require("./middleware/error");
 
 const app = express();
 
+// Nginx/orqali kelganda IP to'g'ri (rate limit, loglar uchun)
+app.set("trust proxy", Number(process.env.TRUST_PROXY_HOPS) || 1);
+
 app.use(express.json());
 app.use(cors());
 app.use(helmet());

@@ -6,7 +6,9 @@ const { auth, isAdmin } = require("../middleware/auth");
 const router = express.Router();
 
 const statusSchema = z.enum(["open", "closed", "resolved"]);
-const replySchema = z.object({ message: z.string().min(1, "Xabar bo'sh bo'lmasin") });
+const replySchema = z.object({
+  message: z.string().min(1, "Xabar bo'sh bo'lmasin").max(4000, "Xabar juda uzun (maksimum 4000 belgi)"),
+});
 
 const SUPPORT_SYSTEM_EMAIL = "support@molbazar.uz";
 

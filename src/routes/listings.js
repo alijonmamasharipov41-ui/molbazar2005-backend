@@ -509,7 +509,7 @@ router.put("/:id", auth, async (req, res, next) => {
 
     const ownerId = check.rows[0].user_id;
     const isAdmin = req.user.role === "admin";
-    const isOwner = req.user.id === ownerId;
+    const isOwner = Number(req.user.id) === Number(ownerId);
 
     if (!isAdmin && !isOwner) {
       return res.status(403).json({ ok: false, error: "Forbidden" });
@@ -783,7 +783,7 @@ router.delete("/:id", auth, async (req, res, next) => {
     }
     const ownerId = check.rows[0].user_id;
     const isAdmin = req.user.role === "admin";
-    const isOwner = req.user.id === ownerId;
+    const isOwner = Number(req.user.id) === Number(ownerId);
     if (!isAdmin && !isOwner) {
       return res.status(403).json({ ok: false, error: "Forbidden" });
     }

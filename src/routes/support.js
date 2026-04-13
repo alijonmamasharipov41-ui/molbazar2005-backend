@@ -7,7 +7,7 @@ const router = express.Router();
 
 const createTicketSchema = z.object({
   subject: z.string().min(1, "Mavzu bo'sh bo'lmasin").max(500),
-  message: z.string().min(1, "Xabar bo'sh bo'lmasin"),
+  message: z.string().min(1, "Xabar bo'sh bo'lmasin").max(4000, "Xabar juda uzun (maksimum 4000 belgi)"),
 });
 
 /**

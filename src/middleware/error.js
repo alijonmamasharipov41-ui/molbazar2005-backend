@@ -22,7 +22,14 @@ function errorHandler(err, req, res, next) {
   const message = err.message || "Server error";
   let status = err.statusCode || 500;
   if (message.includes("Invalid file type") || err.code === "LIMIT_FILE_SIZE") status = 400;
-  res.status(status).json({ ok: false, error: message });
+
+  const isProduction = process.env.NODE_ENV === "production";
+  let clientError = message;
+  if (isProduction && status >= 500) {
+    clientError = "Serverda xatolik yuz berdi. Keyinroq qayta urinib ko'ring.";
+  }
+
+  res.status(status).json({ ok: false, error: clientError });
 }
 
 module.exports = { errorHandler };
