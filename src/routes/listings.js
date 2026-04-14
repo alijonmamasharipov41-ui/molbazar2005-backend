@@ -288,16 +288,19 @@ router.get("/", optionalAuth, async (req, res, next) => {
         paramIndex++;
       }
     }
-    // Bozor: faqat tasdiqlangan. Admin yoki o'z e'lonlari (user_id=o'z id) barcha status.
+    // Bozor (ilova): har doim faqat tasdiqlangan — hatto JWT admin bo'lsa ham.
+    // O'z e'lonlari: ?user_id= o'z id + token mos bo'lsa barcha status.
+    // Admin panel: ?admin_list=1 (faqat role=admin) — moderatsiya ro'yxati; ixtiyoriy ?status=
     const isAdmin = req.user && req.user.role === "admin";
     const ownUserId = req.query.user_id && req.user && String(req.user.id) === String(req.query.user_id);
-    if (!isAdmin && !ownUserId) {
+    const adminListMode =
+      isAdmin && String(req.query.admin_list ?? req.query.moderation ?? "").trim() === "1";
+    if (!ownUserId && !adminListMode) {
       conditions.push(`l.status = $${paramIndex}::text`);
       params.push("approved");
       paramIndex++;
     }
-    // Admin: status bo'yicha filtrlash (approved, pending, rejected)
-    if (isAdmin && req.query.status && String(req.query.status).trim()) {
+    if (adminListMode && isAdmin && req.query.status && String(req.query.status).trim()) {
       const statusVal = String(req.query.status).trim().toLowerCase();
       if (["approved", "pending", "rejected"].includes(statusVal)) {
         conditions.push(`l.status = $${paramIndex}::text`);
@@ -795,7 +798,12 @@ router.delete("/:id", auth, async (req, res, next) => {
         [req.user.id, `listing_deleted#${id}`, ip, ua]
       );
     }
+    const imgRows = await query("SELECT image_url FROM listing_images WHERE listing_id = $1", [id]);
+    const imageUrls = imgRows.rows.map((r) => r.image_url).filter(Boolean);
     await query("DELETE FROM listings WHERE id = $1", [id]);
+    if (imageUrls.length > 0) {
+      await destroyImagesByUrls(imageUrls);
+    }
     res.json({ ok: true });
   } catch (err) {
     next(err);
