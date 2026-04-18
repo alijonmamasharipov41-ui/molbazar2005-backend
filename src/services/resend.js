@@ -33,7 +33,7 @@ async function sendOtpEmail(email, code) {
           <h2 style="color: #1a1a1a;">Molbazar tasdiqlash kodi</h2>
           <p>Sizning tasdiqlash kodingiz:</p>
           <p style="font-size: 28px; font-weight: bold; letter-spacing: 4px; color: #0ea5e9;">${code}</p>
-          <p style="color: #64748b; font-size: 14px;">Kod 10 daqiqa amal qiladi.</p>
+          <p style="color:rgb(117, 145, 185); font-size: 14px;">Kod 10 daqiqa amal qiladi.</p>
         </div>
       `,
     });

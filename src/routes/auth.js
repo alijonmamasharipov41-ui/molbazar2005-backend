@@ -7,8 +7,21 @@ const { query } = require("../db");
 const { JWT_SECRET } = require("../config");
 const { auth } = require("../middleware/auth");
 const { handleVerify } = require("./otp");
+const { normalizeUzbekPhone } = require("../lib/phoneNormalize");
 
 const router = express.Router();
+
+function signUserToken(userRow) {
+  return jwt.sign(
+    {
+      id: userRow.id,
+      role: userRow.role,
+      tokenVersion: Number(userRow.token_version) || 0,
+    },
+    JWT_SECRET,
+    { expiresIn: "30d" }
+  );
+}
 
 /** Telefon + parol: bruteforsni yengillashtirish (IP bo'yicha) */
 const loginLimiter = rateLimit({
@@ -50,14 +63,14 @@ const passwordField = z
   });
 
 const registerSchema = z.object({
-  full_name: z.string().min(1, "full_name required"),
-  phone: z.string().min(1, "phone required"),
+  full_name: z.string().min(2, "Ism kamida 2 belgi").max(120, "Ism juda uzun"),
+  phone: z.string().min(1, "Telefon kiriting"),
   password: passwordField,
 });
 
 const loginSchema = z.object({
-  phone: z.string().min(1, "phone required"),
-  password: z.string().min(1, "password required"),
+  phone: z.string().min(1, "Telefon kiriting"),
+  password: z.string().min(1, "Parol kiriting"),
 });
 
 router.post("/register", registerLimiter, async (req, res, next) => {
@@ -70,15 +83,31 @@ router.post("/register", registerLimiter, async (req, res, next) => {
       });
     }
     const { full_name, phone, password } = parsed.data;
-    const password_hash = await bcrypt.hash(password, 10);
-    await query(
-      "INSERT INTO users (full_name, phone, password_hash, role) VALUES ($1, $2, $3, $4)",
-      [full_name, phone, password_hash, "user"]
+    const norm = normalizeUzbekPhone(phone);
+    if (!norm.ok) {
+      return res.status(400).json({ ok: false, error: norm.error });
+    }
+    const dup = await query(
+      `SELECT 1 FROM users WHERE regexp_replace(COALESCE(phone, ''), '[^0-9]', '', 'g') = $1 LIMIT 1`,
+      [norm.phone]
     );
-    res.status(201).json({ ok: true });
+    if (dup.rows.length > 0) {
+      return res.status(400).json({ ok: false, error: "Bu telefon raqam allaqachon ro'yxatdan o'tgan" });
+    }
+
+    const password_hash = await bcrypt.hash(password, 10);
+    const ins = await query(
+      `INSERT INTO users (full_name, phone, password_hash, role)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, role, COALESCE(token_version, 0) AS token_version`,
+      [full_name.trim(), norm.phone, password_hash, "user"]
+    );
+    const row = ins.rows[0];
+    const token = signUserToken(row);
+    res.status(201).json({ ok: true, token });
   } catch (err) {
     if (err.code === "23505") {
-      return res.status(400).json({ ok: false, error: "Phone already registered" });
+      return res.status(400).json({ ok: false, error: "Bu telefon raqam allaqachon ro'yxatdan o'tgan" });
     }
     next(err);
   }
@@ -94,23 +123,31 @@ router.post("/login", loginLimiter, async (req, res, next) => {
       });
     }
     const { phone, password } = parsed.data;
+    const norm = normalizeUzbekPhone(phone);
+    if (!norm.ok) {
+      return res.status(400).json({ ok: false, error: norm.error });
+    }
     const result = await query(
-      "SELECT id, password_hash, role, COALESCE(token_version, 0) AS token_version FROM users WHERE phone = $1",
-      [phone]
+      `SELECT id, password_hash, role, COALESCE(token_version, 0) AS token_version
+       FROM users
+       WHERE regexp_replace(COALESCE(phone, ''), '[^0-9]', '', 'g') = $1`,
+      [norm.phone]
     );
     if (result.rows.length === 0) {
-      return res.status(401).json({ ok: false, error: "Invalid phone or password" });
+      return res.status(401).json({ ok: false, error: "Telefon yoki parol noto'g'ri" });
     }
     const user = result.rows[0];
+    if (!user.password_hash) {
+      return res.status(401).json({
+        ok: false,
+        error: "Bu akkaunt email orqali ochilgan. Email bilan kirishdan foydalaning.",
+      });
+    }
     const match = await bcrypt.compare(password, user.password_hash);
     if (!match) {
-      return res.status(401).json({ ok: false, error: "Invalid phone or password" });
+      return res.status(401).json({ ok: false, error: "Telefon yoki parol noto'g'ri" });
     }
-    const token = jwt.sign(
-      { id: user.id, role: user.role, tokenVersion: Number(user.token_version) || 0 },
-      JWT_SECRET,
-      { expiresIn: "30d" }
-    );
+    const token = signUserToken(user);
     res.json({ ok: true, token });
   } catch (err) {
     next(err);
